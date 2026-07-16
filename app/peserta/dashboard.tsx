@@ -1,21 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  useColorScheme,
-  Alert,
-  Platform,
-  ActivityIndicator,
-  Image,
-} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
 import { signOut } from 'firebase/auth';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useColorScheme,
+  View,
+} from 'react-native';
 import { auth } from '../../config/firebase';
+import { PesertaBottomNav } from '@/components/peserta/pesertachrome';
 
 export default function PesertaDashboard() {
   const router = useRouter();
@@ -54,12 +55,12 @@ export default function PesertaDashboard() {
   };
 
   // Theme colors
-  const bgTheme = isDark ? '#111314' : '#FAFAFA';
-  const cardBgTheme = isDark ? '#1A1D1E' : '#FFFFFF';
-  const textTheme = isDark ? '#ECEDEE' : '#162031';
-  const subtitleTheme = isDark ? '#9BA1A6' : '#6A7382';
-  const borderTheme = isDark ? '#2E3336' : '#F3F4F6';
-  const primaryTheme = '#D9AA3F'; // Premium Gold
+  const bgTheme = isDark ? '#0F1B2D' : '#F5F3EE';
+  const cardBgTheme = isDark ? '#16273F' : '#FFFFFF';
+  const textTheme = isDark ? '#F5F3EE' : '#0F1B2D';
+  const subtitleTheme = isDark ? '#8A8F98' : '#5C6470';
+  const borderTheme = isDark ? '#233A5C' : '#F5F3EE';
+  const primaryTheme = '#C9A24B'; // Premium Gold
 
   return (
     <View style={[styles.container, { backgroundColor: bgTheme }]}>
@@ -82,7 +83,7 @@ export default function PesertaDashboard() {
             {loading ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Ionicons name="log-out-outline" size={22} color="#EF4444" />
+              <Ionicons name="log-out-outline" size={22} color="#B3413A" />
             )}
           </TouchableOpacity>
         </View>
@@ -103,7 +104,7 @@ export default function PesertaDashboard() {
           <View style={[styles.statCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
             <View style={styles.statCardHeader}>
               <View style={styles.statIconContainer}>
-                <Ionicons name="calendar-outline" size={24} color="#162031" />
+                <Ionicons name="calendar-outline" size={24} color="#0F1B2D" />
               </View>
               <Text style={[styles.statCardLabel, { color: subtitleTheme }]}>Seminar Terdaftar</Text>
             </View>
@@ -117,7 +118,7 @@ export default function PesertaDashboard() {
           <View style={[styles.statCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
             <View style={styles.statCardHeader}>
               <View style={styles.statIconContainer}>
-                <Ionicons name="ribbon-outline" size={24} color="#162031" />
+                <Ionicons name="ribbon-outline" size={24} color="#0F1B2D" />
               </View>
               <Text style={[styles.statCardLabel, { color: subtitleTheme }]}>Sertifikat Tersedia</Text>
             </View>
@@ -128,7 +129,7 @@ export default function PesertaDashboard() {
           </View>
 
           {/* Card 3: Skor Kehadiran (Dark Blue Background) */}
-          <View style={[styles.statCardDark, { backgroundColor: '#111E2E' }]}>
+          <View style={[styles.statCardDark, { backgroundColor: '#0F1B2D' }]}>
             {/* Subtle Toga Watermark */}
             <View style={styles.watermarkContainer}>
               <Ionicons name="school" size={130} color="rgba(255, 255, 255, 0.04)" />
@@ -150,7 +151,7 @@ export default function PesertaDashboard() {
         {/* 4. Seminar Mendatang Section */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionHeaderLeft}>
-            <Ionicons name="time-outline" size={20} color="#162031" style={styles.sectionHeaderIcon} />
+            <Ionicons name="time-outline" size={20} color="#0F1B2D" style={styles.sectionHeaderIcon} />
             <Text style={[styles.sectionTitle, { color: textTheme }]}>Seminar Mendatang</Text>
           </View>
           <TouchableOpacity>
@@ -163,7 +164,7 @@ export default function PesertaDashboard() {
           {/* Seminar 1 */}
           <View style={[styles.seminarCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
             <View style={styles.seminarCardLeft}>
-              <View style={[styles.dateBadge, { backgroundColor: '#162031' }]}>
+              <View style={[styles.dateBadge, { backgroundColor: '#0F1B2D' }]}>
                 <Text style={styles.dateBadgeMonth}>MEI</Text>
                 <Text style={styles.dateBadgeDay}>24</Text>
               </View>
@@ -187,8 +188,8 @@ export default function PesertaDashboard() {
           {/* Seminar 2 */}
           <View style={[styles.seminarCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
             <View style={styles.seminarCardLeft}>
-              <View style={[styles.dateBadge, { backgroundColor: '#E5E7EB' }]}>
-                <Text style={[styles.dateBadgeMonth, { color: '#9CA3AF' }]}>JUN</Text>
+              <View style={[styles.dateBadge, { backgroundColor: '#DCD7CB' }]}>
+                <Text style={[styles.dateBadgeMonth, { color: '#8A8F98' }]}>JUN</Text>
                 <Text style={[styles.dateBadgeDay, { color: '#1F2937' }]}>02</Text>
               </View>
               <View style={styles.seminarInfo}>
@@ -211,8 +212,8 @@ export default function PesertaDashboard() {
           {/* Seminar 3 */}
           <View style={[styles.seminarCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
             <View style={styles.seminarCardLeft}>
-              <View style={[styles.dateBadge, { backgroundColor: '#E5E7EB' }]}>
-                <Text style={[styles.dateBadgeMonth, { color: '#9CA3AF' }]}>JUN</Text>
+              <View style={[styles.dateBadge, { backgroundColor: '#DCD7CB' }]}>
+                <Text style={[styles.dateBadgeMonth, { color: '#8A8F98' }]}>JUN</Text>
                 <Text style={[styles.dateBadgeDay, { color: '#1F2937' }]}>15</Text>
               </View>
               <View style={styles.seminarInfo}>
@@ -258,7 +259,7 @@ export default function PesertaDashboard() {
             <View style={styles.certFooter}>
               <View style={styles.certSignContainer}>
                 <Image
-                  source={require('../../assets/ttd_risam.png')}
+                  source={require('../../assets/tanda_tangan.png')}
                   style={styles.signatureImage}
                   resizeMode="contain"
                 />
@@ -278,39 +279,14 @@ export default function PesertaDashboard() {
         </View>
 
         {/* 6. Gold Button */}
-        <TouchableOpacity style={[styles.listAllBtn, { backgroundColor: '#E3C185' }]}>
+        <TouchableOpacity style={[styles.listAllBtn, { backgroundColor: '#E4CE8F' }]}>
           <Ionicons name="download-outline" size={20} color="#FFFFFF" style={styles.btnIcon} />
           <Text style={styles.listAllBtnText}>LIHAT SEMUA SERTIFIKAT</Text>
         </TouchableOpacity>
       </ScrollView>
 
       {/* 7. Bottom Navigation Bar */}
-      <View style={styles.bottomTabBar}>
-        <TouchableOpacity style={styles.tabItem}>
-          <Ionicons name="grid" size={22} color={primaryTheme} />
-          <Text style={[styles.tabLabel, { color: primaryTheme }]}>Home</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItem}>
-          <Ionicons name="compass-outline" size={22} color="#94A3B8" />
-          <Text style={[styles.tabLabel, { color: '#94A3B8' }]}>Catalog</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItem}>
-          <Ionicons name="calendar-outline" size={22} color="#94A3B8" />
-          <Text style={[styles.tabLabel, { color: '#94A3B8' }]}>My Seminars</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItem}>
-          <Ionicons name="qr-code-outline" size={22} color="#94A3B8" />
-          <Text style={[styles.tabLabel, { color: '#94A3B8' }]}>Attendance</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItem}>
-          <Ionicons name="ribbon-outline" size={22} color="#94A3B8" />
-          <Text style={[styles.tabLabel, { color: '#94A3B8' }]}>Certificates</Text>
-        </TouchableOpacity>
-      </View>
+      <PesertaBottomNav />
     </View>
   );
 }
@@ -323,7 +299,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#162031',
+    backgroundColor: '#0F1B2D',
     paddingHorizontal: 24,
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 16,
@@ -408,7 +384,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F5F3EE',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
@@ -453,7 +429,7 @@ const styles = StyleSheet.create({
   statCardSubtextDark: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#94A3B8',
+    color: '#5C6470',
     marginTop: 2,
   },
   sectionHeader: {
@@ -547,7 +523,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FBFAF6',
   },
   certPreviewCard: {
     borderRadius: 20,
@@ -571,7 +547,7 @@ const styles = StyleSheet.create({
   },
   certInnerBorder: {
     borderWidth: 1.5,
-    borderColor: '#F3F4F6',
+    borderColor: '#F5F3EE',
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -580,20 +556,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 1.5,
-    color: '#162031',
+    color: '#0F1B2D',
     textAlign: 'center',
   },
   certSubtitle: {
     fontSize: 9,
     fontStyle: 'italic',
-    color: '#6A7382',
+    color: '#5C6470',
     marginTop: 12,
     textAlign: 'center',
   },
   certName: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#162031',
+    color: '#0F1B2D',
     marginTop: 8,
     marginBottom: 8,
     textAlign: 'center',
@@ -602,13 +578,13 @@ const styles = StyleSheet.create({
   certDesc: {
     fontSize: 8.5,
     lineHeight: 14,
-    color: '#6A7382',
+    color: '#5C6470',
     textAlign: 'center',
     paddingHorizontal: 8,
   },
   certBoldText: {
     fontWeight: '700',
-    color: '#162031',
+    color: '#0F1B2D',
   },
   certFooter: {
     flexDirection: 'row',
@@ -630,13 +606,13 @@ const styles = StyleSheet.create({
   signLine: {
     width: '100%',
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#DCD7CB',
     marginVertical: 4,
   },
   certSignLabel: {
     fontSize: 7,
     fontWeight: '700',
-    color: '#6A7382',
+    color: '#5C6470',
   },
   sealStamp: {
     width: 54,
@@ -673,7 +649,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     ...Platform.select({
       ios: {
-        shadowColor: '#D9AA3F',
+        shadowColor: '#C9A24B',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.25,
         shadowRadius: 6,
@@ -692,24 +668,5 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
   },
-  bottomTabBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: '#162031',
-    height: 64,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)',
-    paddingBottom: Platform.OS === 'ios' ? 12 : 0,
-  },
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  tabLabel: {
-    fontSize: 9,
-    fontWeight: '600',
-    marginTop: 4,
-  },
+
 });

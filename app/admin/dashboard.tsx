@@ -1,37 +1,55 @@
-import React, { useState, useEffect } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  useColorScheme,
-  Alert,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
 import { signOut } from 'firebase/auth';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { auth } from '../../config/firebase';
+import { DesignColors, Radius } from '../../constants/theme';
+
+interface StatItem {
+  key: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+}
+
+interface SeminarItem {
+  id: string;
+  title: string;
+  image: string;
+  status: 'ACTIVE' | 'UPCOMING';
+  participantCount: string;
+  date: string;
+  avatars: string[];
+  extraCount: string;
+  actionLabel: string;
+  onAction: () => void;
+}
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
-
-  const [adminName, setAdminName] = useState('Admin CertifyElite');
+  const [adminName, setAdminName] = useState('Admin');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const user = auth.currentUser;
     if (user) {
-      setAdminName(user.displayName || user.email || 'Admin CertifyElite');
+      setAdminName(user.displayName || user.email || 'Admin');
     }
   }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     Alert.alert('Konfirmasi Keluar', 'Apakah Anda yakin ingin keluar?', [
       { text: 'Batal', style: 'cancel' },
       {
@@ -52,158 +70,188 @@ export default function AdminDashboard() {
     ]);
   };
 
-  // Theme colors
-  const bgTheme = isDark ? '#111314' : '#FAFAFA';
-  const cardBgTheme = isDark ? '#1A1D1E' : '#FFFFFF';
-  const textTheme = isDark ? '#ECEDEE' : '#1F2937';
-  const subtitleTheme = isDark ? '#9BA1A6' : '#6B7280';
-  const borderTheme = isDark ? '#2E3336' : '#E5E7EB';
-  const primaryTheme = '#D4AF37'; // Gold Accent
+  const stats: StatItem[] = [
+    { key: 'seminar', icon: 'document-text-outline', label: 'TOTAL SEMINAR', value: '42' },
+    { key: 'peserta', icon: 'people-outline', label: 'TOTAL PESERTA', value: '12,840' },
+    { key: 'sertifikat', icon: 'ribbon-outline', label: 'SERTIFIKAT TERBIT', value: '11,205' },
+    { key: 'kehadiran', icon: 'stats-chart-outline', label: 'KEHADIRAN RATA-RATA', value: '87.4%' },
+  ];
+
+  const seminarList: SeminarItem[] = [
+    {
+      id: '1',
+      title: 'Seminar Nasional Cyber Security 2024',
+      image:
+        'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80',
+      status: 'ACTIVE',
+      participantCount: '1,240 Peserta',
+      date: '24 Jul 2024',
+      avatars: [
+        'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80',
+        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&q=80',
+      ],
+      extraCount: '+99',
+      actionLabel: 'Kelola Sesi',
+      onAction: () => router.push('/admin/absensi'),
+    },
+    {
+      id: '2',
+      title: 'Workshop UI/UX Professional Design',
+      image:
+        'https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80',
+      status: 'UPCOMING',
+      participantCount: '85 Peserta',
+      date: '02 Agu 2024',
+      avatars: [
+        'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=80&q=80',
+        'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=80&q=80',
+      ],
+      extraCount: '+8',
+      actionLabel: 'Edit Draft',
+      onAction: () => router.push('/admin/seminar'),
+    },
+  ];
 
   return (
-    <View style={[styles.container, { backgroundColor: bgTheme }]}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      
-      {/* Premium Header */}
-      <View style={[styles.header, { backgroundColor: cardBgTheme, borderBottomColor: borderTheme }]}>
-        <View style={styles.headerProfile}>
-          <View style={[styles.avatar, { backgroundColor: 'rgba(212, 175, 55, 0.1)' }]}>
-            <Ionicons name="shield-checkmark" size={24} color={primaryTheme} />
-          </View>
-          <View style={styles.profileText}>
-            <Text style={[styles.welcomeText, { color: subtitleTheme }]}>System Administrator</Text>
-            <Text style={[styles.adminName, { color: textTheme }]} numberOfLines={1}>{adminName}</Text>
-          </View>
-        </View>
-        
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} disabled={loading}>
+    <View style={styles.container}>
+      <StatusBar style="light" />
+
+      {/* Header Bar */}
+      <View style={styles.headerBar}>
+        <View style={styles.headerSpacer} />
+        <Text style={styles.brandText}>CertifyElite</Text>
+        <TouchableOpacity style={styles.avatarContainer} onPress={handleLogout} disabled={loading}>
           {loading ? (
-            <ActivityIndicator size="small" color={primaryTheme} />
+            <ActivityIndicator size="small" color={DesignColors.gold} />
           ) : (
-            <Ionicons name="log-out-outline" size={24} color="#EF4444" />
+            <Image
+              source={{
+                uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
+              }}
+              style={styles.avatarImage}
+            />
           )}
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Title */}
-        <Text style={[styles.sectionTitle, { color: textTheme }]}>Pusat Kontrol</Text>
-        
-        {/* Quick Stats Grid */}
+      {/* Scrollable Content */}
+      <ScrollView
+        style={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Title Section */}
+        <View style={styles.titleSection}>
+          <Text style={styles.sectionMainTitle}>Ringkasan Statistik</Text>
+          <Text style={styles.sectionSubtitle}>
+            Pantau performa kegiatan seminar dan penerbitan sertifikat Anda hari ini.
+          </Text>
+        </View>
+
+        {/* Stat Cards Grid (2x2) */}
         <View style={styles.statsGrid}>
-          {/* Stat Item 1 */}
-          <View style={[styles.statCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
-            <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(212, 175, 55, 0.1)' }]}>
-              <Ionicons name="ribbon-outline" size={22} color={primaryTheme} />
+          {stats.map((stat) => (
+            <View key={stat.key} style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name={stat.icon} size={20} color={DesignColors.navyDeep} />
+              </View>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+              <Text style={styles.statValue}>{stat.value}</Text>
             </View>
-            <Text style={[styles.statValue, { color: textTheme }]}>124</Text>
-            <Text style={[styles.statLabel, { color: subtitleTheme }]}>Sertifikat Rilis</Text>
-          </View>
-
-          {/* Stat Item 2 */}
-          <View style={[styles.statCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
-            <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
-              <Ionicons name="people-outline" size={22} color="#3B82F6" />
-            </View>
-            <Text style={[styles.statValue, { color: textTheme }]}>1,402</Text>
-            <Text style={[styles.statLabel, { color: subtitleTheme }]}>Total Peserta</Text>
-          </View>
-
-          {/* Stat Item 3 */}
-          <View style={[styles.statCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
-            <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-              <Ionicons name="easel-outline" size={22} color="#10B981" />
-            </View>
-            <Text style={[styles.statValue, { color: textTheme }]}>12</Text>
-            <Text style={[styles.statLabel, { color: subtitleTheme }]}>Seminar Aktif</Text>
-          </View>
+          ))}
         </View>
 
-        {/* Quick Actions Title */}
-        <Text style={[styles.sectionSubtitle, { color: textTheme, marginTop: 24 }]}>Aksi Cepat</Text>
-        
-        {/* Quick Actions List */}
-        <View style={styles.actionsGrid}>
-          {/* Action 1 */}
-          <TouchableOpacity 
-            style={[styles.actionCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}
-            onPress={() => router.push('/admin/generate_sertifikat')}
-          >
-            <Ionicons name="add-circle" size={32} color={primaryTheme} />
-            <Text style={[styles.actionLabel, { color: textTheme }]}>Buat Sertifikat</Text>
-          </TouchableOpacity>
+        {/* Seminar Berjalan Section */}
+        <Text style={styles.sectionHeaderTitle}>Seminar Berjalan</Text>
 
-          {/* Action 2 */}
-          <TouchableOpacity 
-            style={[styles.actionCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}
-            onPress={() => router.push('/admin/template_sertifikat')}
-          >
-            <Ionicons name="document-attach" size={32} color="#3B82F6" />
-            <Text style={[styles.actionLabel, { color: textTheme }]}>Template Desain</Text>
-          </TouchableOpacity>
-
-          {/* Action 3 */}
-          <TouchableOpacity 
-            style={[styles.actionCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}
-            onPress={() => router.push('/admin/seminar')}
-          >
-            <Ionicons name="calendar" size={32} color="#10B981" />
-            <Text style={[styles.actionLabel, { color: textTheme }]}>Kelola Seminar</Text>
-          </TouchableOpacity>
-
-          {/* Action 4 */}
-          <TouchableOpacity 
-            style={[styles.actionCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}
-            onPress={() => router.push('/admin/laporan')}
-          >
-            <Ionicons name="analytics" size={32} color="#8B5CF6" />
-            <Text style={[styles.actionLabel, { color: textTheme }]}>Laporan Statistik</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Recent Activities Section */}
-        <Text style={[styles.sectionSubtitle, { color: textTheme, marginTop: 24 }]}>Rilis Sertifikat Terbaru</Text>
-
-        <View style={[styles.activityList, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
-          {/* Item 1 */}
-          <View style={styles.activityItem}>
-            <View style={styles.activityInfo}>
-              <Ionicons name="checkmark-circle" size={20} color="#10B981" style={styles.activityIcon} />
-              <View>
-                <Text style={[styles.activityName, { color: textTheme }]}>Webinar AI Developer 2026</Text>
-                <Text style={[styles.activityMeta, { color: subtitleTheme }]}>Diterbitkan untuk 350 peserta</Text>
+        {seminarList.map((seminar) => (
+          <View key={seminar.id} style={styles.seminarCard}>
+            <View style={styles.imageWrapper}>
+              <Image source={{ uri: seminar.image }} style={styles.seminarImage} />
+              <View
+                style={[
+                  styles.statusBadge,
+                  seminar.status === 'ACTIVE' ? styles.badgeActive : styles.badgeUpcoming,
+                ]}
+              >
+                <Text style={styles.statusText}>{seminar.status}</Text>
               </View>
             </View>
-            <Text style={[styles.activityTime, { color: subtitleTheme }]}>Baru Saja</Text>
-          </View>
-          <View style={[styles.divider, { backgroundColor: borderTheme }]} />
 
-          {/* Item 2 */}
-          <View style={styles.activityItem}>
-            <View style={styles.activityInfo}>
-              <Ionicons name="checkmark-circle" size={20} color="#10B981" style={styles.activityIcon} />
-              <View>
-                <Text style={[styles.activityName, { color: textTheme }]}>Seminar Nasional Cyber Security</Text>
-                <Text style={[styles.activityMeta, { color: subtitleTheme }]}>Diterbitkan untuk 420 peserta</Text>
+            <View style={styles.cardInfo}>
+              <Text style={styles.seminarTitle}>{seminar.title}</Text>
+
+              <View style={styles.detailRow}>
+                <Ionicons
+                  name="people-outline"
+                  size={14}
+                  color={DesignColors.slateGray}
+                  style={styles.detailIcon}
+                />
+                <Text style={styles.detailText}>{seminar.participantCount}</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Ionicons
+                  name="calendar-outline"
+                  size={14}
+                  color={DesignColors.slateGray}
+                  style={styles.detailIcon}
+                />
+                <Text style={styles.detailText}>{seminar.date}</Text>
+              </View>
+
+              <View style={styles.cardDivider} />
+
+              <View style={styles.cardFooter}>
+                <View style={styles.avatarStack}>
+                  {seminar.avatars.map((uri, index) => (
+                    <Image
+                      key={uri}
+                      source={{ uri }}
+                      style={[
+                        styles.stackedAvatar,
+                        index > 0 && { marginLeft: -12 },
+                        { zIndex: seminar.avatars.length - index + 1 },
+                      ]}
+                    />
+                  ))}
+                  <View style={[styles.avatarIndicator, { marginLeft: -12, zIndex: 1 }]}>
+                    <Text style={styles.indicatorText}>{seminar.extraCount}</Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity onPress={seminar.onAction}>
+                  <Text style={styles.footerLinkText}>{seminar.actionLabel}</Text>
+                </TouchableOpacity>
               </View>
             </View>
-            <Text style={[styles.activityTime, { color: subtitleTheme }]}>2 Jam Lalu</Text>
           </View>
-          <View style={[styles.divider, { backgroundColor: borderTheme }]} />
-
-          {/* Item 3 */}
-          <View style={styles.activityItem}>
-            <View style={styles.activityInfo}>
-              <Ionicons name="checkmark-circle" size={20} color="#10B981" style={styles.activityIcon} />
-              <View>
-                <Text style={[styles.activityName, { color: textTheme }]}>Workshop Flutter Advanced</Text>
-                <Text style={[styles.activityMeta, { color: subtitleTheme }]}>Diterbitkan untuk 120 peserta</Text>
-              </View>
-            </View>
-            <Text style={[styles.activityTime, { color: subtitleTheme }]}>Kemarin</Text>
-          </View>
-        </View>
+        ))}
       </ScrollView>
+
+      {/* Bottom Navigation Bar */}
+      <View style={styles.bottomTabBar}>
+        <TouchableOpacity style={styles.tabItem}>
+          <Ionicons name="home" size={22} color={DesignColors.gold} />
+          <Text style={[styles.tabLabel, { color: DesignColors.gold }]}>Beranda</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabItem} onPress={() => router.push('/admin/generate_sertifikat')}>
+          <Ionicons name="ribbon-outline" size={22} color={DesignColors.goldSoft} />
+          <Text style={styles.tabLabel}>Sertifikat</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabItem} onPress={() => router.push('/admin/seminar')}>
+          <Ionicons name="calendar-outline" size={22} color={DesignColors.goldSoft} />
+          <Text style={styles.tabLabel}>Seminar</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabItem} onPress={() => router.push('/admin/profil')}>
+          <Ionicons name="person-outline" size={22} color={DesignColors.goldSoft} />
+          <Text style={styles.tabLabel}>Profil</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -211,15 +259,86 @@ export default function AdminDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: DesignColors.offWhite,
   },
-  header: {
+  headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
+    backgroundColor: DesignColors.navyDeep,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 55 : 40,
+    paddingBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  headerSpacer: {
+    width: 36,
+  },
+  brandText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: DesignColors.gold,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    flex: 1,
+  },
+  avatarContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: DesignColors.goldSoft,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 88,
+  },
+  titleSection: {
+    marginBottom: 20,
+  },
+  sectionMainTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: DesignColors.navyDeep,
+    marginBottom: 6,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: DesignColors.slateGray,
+    lineHeight: 20,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  statCard: {
+    width: '48%',
+    backgroundColor: DesignColors.ivoryCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+    padding: 16,
+    marginBottom: 12,
     ...Platform.select({
       ios: {
         shadowColor: '#000000',
@@ -227,161 +346,172 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 8,
       },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
-      },
+      android: { elevation: 1 },
+      web: { boxShadow: '0 2px 8px rgba(15, 27, 45, 0.05)' },
     }),
   },
-  headerProfile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 16,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  profileText: {
-    flex: 1,
-  },
-  welcomeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  adminName: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  logoutButton: {
-    padding: 8,
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    marginBottom: 20,
-  },
-  sectionSubtitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginBottom: 16,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statCard: {
-    flex: 1,
-    marginHorizontal: 4,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    alignItems: 'center',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
-      },
-    }),
-  },
-  statIconWrapper: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.sm,
+    backgroundColor: DesignColors.offWhite,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
   },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '800',
-  },
   statLabel: {
     fontSize: 10,
     fontWeight: '600',
-    marginTop: 4,
-    textAlign: 'center',
+    color: DesignColors.slateGray,
+    letterSpacing: 0.6,
+    marginBottom: 4,
   },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -6,
+  statValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: DesignColors.navyDeep,
   },
-  actionCard: {
-    width: '46%',
-    aspectRatio: 1.15,
-    marginHorizontal: '2%',
-    marginVertical: 6,
-    borderRadius: 16,
+  sectionHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: DesignColors.navyDeep,
+    marginBottom: 16,
+  },
+  seminarCard: {
+    backgroundColor: DesignColors.ivoryCard,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: DesignColors.borderLight,
+    marginBottom: 20,
+    overflow: 'hidden',
     ...Platform.select({
-      web: {
-        boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
       },
+      android: { elevation: 2 },
+      web: { boxShadow: '0 4px 14px rgba(15, 27, 45, 0.06)' },
     }),
   },
-  actionLabel: {
+  imageWrapper: {
+    height: 150,
+    width: '100%',
+    position: 'relative',
+  },
+  seminarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  statusBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
+  },
+  badgeActive: {
+    backgroundColor: DesignColors.statusGreen,
+  },
+  badgeUpcoming: {
+    backgroundColor: DesignColors.gold,
+  },
+  statusText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: DesignColors.offWhite,
+    letterSpacing: 0.8,
+  },
+  cardInfo: {
+    padding: 16,
+  },
+  seminarTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: DesignColors.navyDeep,
+    lineHeight: 20,
+    marginBottom: 10,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  detailIcon: {
+    marginRight: 8,
+  },
+  detailText: {
     fontSize: 12,
-    fontWeight: '700',
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  activityList: {
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-  },
-  activityInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 12,
-  },
-  activityIcon: {
-    marginRight: 12,
-  },
-  activityName: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  activityMeta: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  activityTime: {
-    fontSize: 10,
+    color: DesignColors.slateGray,
     fontWeight: '500',
   },
-  divider: {
+  cardDivider: {
     height: 1,
-    width: '100%',
+    backgroundColor: DesignColors.borderLight,
+    marginVertical: 14,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  avatarStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stackedAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: DesignColors.ivoryCard,
+  },
+  avatarIndicator: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: DesignColors.navyDeep,
+    borderWidth: 2,
+    borderColor: DesignColors.ivoryCard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  indicatorText: {
+    fontSize: 8,
+    color: DesignColors.offWhite,
+    fontWeight: '700',
+  },
+  footerLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: DesignColors.gold,
+    textDecorationLine: 'underline',
+  },
+  bottomTabBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: DesignColors.navyDeep,
+    height: 64,
+    borderTopWidth: 1,
+    borderTopColor: DesignColors.navySoft,
+    paddingBottom: Platform.OS === 'ios' ? 12 : 0,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  tabItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  tabLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    marginTop: 4,
+    color: DesignColors.goldSoft,
   },
 });

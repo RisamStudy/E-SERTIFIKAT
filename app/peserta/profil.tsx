@@ -1,0 +1,200 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { signOut } from 'firebase/auth';
+import React, { useState } from 'react';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { PesertaScaffold } from '../../components/peserta/pesertachrome';
+import { auth } from '../../config/firebase';
+import { DesignColors, Radius } from '../../constants/theme';
+
+interface MenuItem {
+  key: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  description: string;
+  onPress: () => void;
+  tone?: 'default' | 'danger';
+}
+
+export default function PesertaProfilScreen() {
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const user = auth.currentUser;
+  const displayName = user?.displayName || 'Peserta';
+  const email = user?.email || 'peserta@certifyelite.id';
+
+  const handleLogout = () => {
+    Alert.alert('Konfirmasi Keluar', 'Apakah Anda yakin ingin keluar dari akun?', [
+      { text: 'Batal', style: 'cancel' },
+      {
+        text: 'Keluar',
+        style: 'destructive',
+        onPress: async () => {
+          setLoggingOut(true);
+          try {
+            await signOut(auth);
+            router.replace('/login');
+          } catch {
+            Alert.alert('Error', 'Gagal keluar dari sesi.');
+          } finally {
+            setLoggingOut(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const menuItems: MenuItem[] = [
+    {
+      key: 'seminar_saya',
+      icon: 'calendar-outline',
+      label: 'Seminar Saya',
+      description: 'Seminar yang diikuti & jadwal mendatang',
+      onPress: () => router.push('/peserta/seminar_saya'),
+    },
+    {
+      key: 'sertifikat',
+      icon: 'ribbon-outline',
+      label: 'Sertifikat Saya',
+      description: 'Koleksi sertifikat digital Anda',
+      onPress: () => router.push('/peserta/sertifikat'),
+    },
+    {
+      key: 'daftar_seminar',
+      icon: 'search-outline',
+      label: 'Cari Seminar Baru',
+      description: 'Jelajahi seminar & workshop terbaru',
+      onPress: () => router.push('/peserta/daftar_seminar'),
+    },
+    {
+      key: 'bantuan',
+      icon: 'help-circle-outline',
+      label: 'Pusat Bantuan',
+      description: 'FAQ & hubungi tim support',
+      onPress: () => Alert.alert('Bantuan', 'Hubungi support@certifyelite.id untuk bantuan lebih lanjut.'),
+    },
+    {
+      key: 'keluar',
+      icon: 'log-out-outline',
+      label: 'Keluar',
+      description: 'Akhiri sesi akun saat ini',
+      onPress: handleLogout,
+      tone: 'danger',
+    },
+  ];
+
+  return (
+    <PesertaScaffold title="Profil Saya">
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.identityCard}>
+          <View style={styles.avatarRing}>
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80' }}
+              style={styles.avatar}
+            />
+          </View>
+          <Text style={styles.name}>{displayName}</Text>
+          <Text style={styles.email}>{email}</Text>
+          <View style={styles.roleBadge}>
+            <Ionicons name="school-outline" size={12} color={DesignColors.navyDeep} />
+            <Text style={styles.roleText}>Peserta Aktif</Text>
+          </View>
+        </View>
+
+        <View style={styles.quickStatsRow}>
+          <View style={styles.quickStat}>
+            <Text style={styles.quickStatValue}>6</Text>
+            <Text style={styles.quickStatLabel}>Seminar Diikuti</Text>
+          </View>
+          <View style={styles.quickStatDivider} />
+          <View style={styles.quickStat}>
+            <Text style={styles.quickStatValue}>2</Text>
+            <Text style={styles.quickStatLabel}>Sertifikat</Text>
+          </View>
+          <View style={styles.quickStatDivider} />
+          <View style={styles.quickStat}>
+            <Text style={styles.quickStatValue}>92%</Text>
+            <Text style={styles.quickStatLabel}>Kehadiran</Text>
+          </View>
+        </View>
+
+        <View style={styles.menuGroup}>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={item.key}
+              style={[styles.menuRow, index === menuItems.length - 1 && styles.menuRowLast]}
+              onPress={item.onPress}
+              disabled={item.key === 'keluar' && loggingOut}
+            >
+              <View style={[styles.menuIconWrap, item.tone === 'danger' && { backgroundColor: 'rgba(179, 65, 58, 0.1)' }]}>
+                <Ionicons name={item.icon} size={18} color={item.tone === 'danger' ? DesignColors.statusRed : DesignColors.navyDeep} />
+              </View>
+              <View style={styles.menuTextWrap}>
+                <Text style={[styles.menuLabel, item.tone === 'danger' && { color: DesignColors.statusRed }]}>{item.label}</Text>
+                <Text style={styles.menuDescription}>{item.description}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={DesignColors.slateGray} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.versionText}>CertifyElite • v1.0.0</Text>
+      </ScrollView>
+    </PesertaScaffold>
+  );
+}
+
+const styles = StyleSheet.create({
+  scrollContent: { padding: 20, paddingBottom: 32 },
+  identityCard: {
+    backgroundColor: DesignColors.navyDeep,
+    borderRadius: Radius.xl,
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  avatarRing: { width: 84, height: 84, borderRadius: 42, borderWidth: 2, borderColor: DesignColors.gold, padding: 3, marginBottom: 14 },
+  avatar: { width: '100%', height: '100%', borderRadius: 39 },
+  name: { fontSize: 18, fontWeight: '700', color: DesignColors.offWhite, marginBottom: 2 },
+  email: { fontSize: 12, color: DesignColors.goldSoft, marginBottom: 12 },
+  roleBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: DesignColors.gold, paddingHorizontal: 12, paddingVertical: 5, borderRadius: Radius.xl },
+  roleText: { fontSize: 11, fontWeight: '700', color: DesignColors.navyDeep },
+  quickStatsRow: {
+    flexDirection: 'row',
+    backgroundColor: DesignColors.ivoryCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+    paddingVertical: 16,
+    marginBottom: 20,
+  },
+  quickStat: { flex: 1, alignItems: 'center' },
+  quickStatValue: { fontSize: 16, fontWeight: '700', color: DesignColors.navyDeep },
+  quickStatLabel: { fontSize: 10, color: DesignColors.slateGray, marginTop: 4, textAlign: 'center' },
+  quickStatDivider: { width: 1, backgroundColor: DesignColors.borderLight },
+  menuGroup: {
+    backgroundColor: DesignColors.ivoryCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+    overflow: 'hidden',
+    marginBottom: 20,
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: DesignColors.borderLight,
+    gap: 12,
+  },
+  menuRowLast: { borderBottomWidth: 0 },
+  menuIconWrap: { width: 36, height: 36, borderRadius: Radius.sm, backgroundColor: DesignColors.offWhite, alignItems: 'center', justifyContent: 'center' },
+  menuTextWrap: { flex: 1 },
+  menuLabel: { fontSize: 14, fontWeight: '600', color: DesignColors.navyDeep },
+  menuDescription: { fontSize: 11, color: DesignColors.slateGray, marginTop: 2 },
+  versionText: { textAlign: 'center', fontSize: 11, color: DesignColors.slateGray },
+});

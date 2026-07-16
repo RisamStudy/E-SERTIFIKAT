@@ -27,6 +27,38 @@ export const Colors = {
   },
 };
 
+/**
+ * Design tokens for the E-Sertifikat app (admin & peserta), derived from `design.md`.
+ * Theme: Navy — Gold — Off-White. Additive to the tokens above; does not replace them.
+ */
+export const DesignColors = {
+  navyDeep: '#0F1B2D',
+  navyBase: '#16273F',
+  navySoft: '#233A5C',
+  gold: '#C9A24B',
+  goldSoft: '#E4CE8F',
+  offWhite: '#F5F3EE',
+  ivoryCard: '#FBFAF6',
+  charcoal: '#232323',
+  slateGray: '#5C6470',
+  statusRed: '#B3413A',
+  statusGreen: '#3E7A5D',
+  borderLight: '#DCD7CB',
+  borderDark: '#2A3A54',
+};
+
+export const Radius = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+};
+
+export const AppFonts = {
+  ui: Platform.select({ ios: 'System', android: 'sans-serif', web: 'system-ui' }),
+  certificate: Platform.select({ ios: 'Georgia', android: 'serif', web: 'Georgia, serif' }),
+};
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
