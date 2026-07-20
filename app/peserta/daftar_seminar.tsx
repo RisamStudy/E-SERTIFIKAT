@@ -1,76 +1,134 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+    addDoc,
+    collection,
+    getDocs,
+    orderBy,
+    query,
+    where,
+} from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { PesertaScaffold } from '../../components/peserta/pesertachrome';
 import { EmptyState } from '../../components/ui/emptystate';
+import { auth, db } from '../../config/firebase';
 import { DesignColors, Radius } from '../../constants/theme';
 
 interface SeminarTersedia {
   id: string;
   title: string;
   image: string;
-  narasumber: string;
-  tanggal: string;
-  kuota: number;
-  terisi: number;
-  kategori: string;
+  lecturer: string;   // nama narasumber dari field 'lecturer' di Firestore
+  date: string;       // tanggal dari field 'date'
+  status: string;
+  participantCount: number;
   registered: boolean;
 }
 
-const CATEGORIES = ['Semua', 'Teknologi', 'Desain', 'Akademik'];
-
-const initialList: SeminarTersedia[] = [
-  {
-    id: '1',
-    title: 'Seminar Nasional Cyber Security 2024',
-    image: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80',
-    narasumber: 'Prof. Dr. Aninditya Putri',
-    tanggal: '24 Jul 2024 • 09:00 WIB',
-    kuota: 1500,
-    terisi: 1240,
-    kategori: 'Teknologi',
-    registered: false,
-  },
-  {
-    id: '2',
-    title: 'Workshop UI/UX Professional Design',
-    image: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80',
-    narasumber: 'Ir. Bagus Wirawan, M.Kom.',
-    tanggal: '02 Agu 2024 • 13:00 WIB',
-    kuota: 100,
-    terisi: 85,
-    kategori: 'Desain',
-    registered: false,
-  },
-  {
-    id: '3',
-    title: 'Konferensi Rekayasa Perangkat Lunak',
-    image: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80',
-    narasumber: 'Dr. Ir. Taufik Hidayat',
-    tanggal: '14 Agu 2024 • 08:30 WIB',
-    kuota: 700,
-    terisi: 610,
-    kategori: 'Akademik',
-    registered: true,
-  },
-];
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80';
 
 export default function PesertaDaftarSeminarScreen() {
   const router = useRouter();
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('Semua');
-  const [list, setList] = useState<SeminarTersedia[]>(initialList);
+  const [list, setList] = useState<SeminarTersedia[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = list.filter((item) => {
-    const matchSearch = item.title.toLowerCase().includes(search.toLowerCase());
-    const matchCategory = category === 'Semua' || item.kategori === category;
-    return matchSearch && matchCategory;
-  });
+  useEffect(() => {
+    loadSeminars();
+  }, []);
 
-  const handleRegister = (id: string) => {
-    setList((prev) => prev.map((item) => (item.id === id ? { ...item, registered: true, terisi: item.terisi + 1 } : item)));
-    Alert.alert('Pendaftaran Terkirim', 'Anda akan menerima notifikasi setelah pendaftaran disetujui admin.');
+  const loadSeminars = async () => {
+    setLoading(true);
+    try {
+      const uid = auth.currentUser?.uid;
+
+      // Ambil semua seminar yang aktif atau selesai (bukan draft)
+      const semSnap = await getDocs(
+        query(collection(db, 'seminar'), orderBy('createdAt', 'desc'))
+      );
+
+      // Ambil seminar yang sudah didaftarkan user ini
+      let registeredIds: Set<string> = new Set();
+      if (uid) {
+        const regSnap = await getDocs(
+          query(collection(db, 'pendaftaran'), where('pesertaId', '==', uid))
+        );
+        regSnap.docs.forEach(d => {
+          const data = d.data() as { seminarId: string };
+          registeredIds.add(data.seminarId);
+        });
+      }
+
+      const data: SeminarTersedia[] = semSnap.docs
+        .map(d => {
+          const raw = d.data() as {
+            title: string;
+            image?: string;
+            lecturer?: string;
+            date?: string;
+            status?: string;
+            participantCount?: number;
+          };
+          return {
+            id: d.id,
+            title: raw.title ?? '—',
+            image: raw.image || FALLBACK_IMAGE,
+            lecturer: raw.lecturer ?? '—',
+            date: raw.date ?? '—',
+            status: raw.status ?? 'aktif',
+            participantCount: raw.participantCount ?? 0,
+            registered: registeredIds.has(d.id),
+          };
+        })
+        // Tampilkan semua kecuali draft
+        .filter(s => s.status !== 'draft');
+
+      setList(data);
+    } catch (err) {
+      console.error('loadSeminars error:', err);
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filtered = list.filter(item =>
+    item.title.toLowerCase().includes(search.toLowerCase()) ||
+    item.lecturer.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleRegister = async (id: string) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      Alert.alert('Login Diperlukan', 'Silakan login untuk mendaftar seminar.');
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, 'pendaftaran'), {
+        pesertaId: uid,
+        seminarId: id,
+        status: 'menunggu',
+        createdAt: new Date().toISOString(),
+      });
+      setList(prev =>
+        prev.map(item => (item.id === id ? { ...item, registered: true } : item))
+      );
+      Alert.alert('Pendaftaran Terkirim', 'Anda akan menerima notifikasi setelah pendaftaran disetujui admin.');
+    } catch {
+      Alert.alert('Gagal', 'Pendaftaran gagal. Coba lagi.');
+    }
   };
 
   return (
@@ -79,70 +137,86 @@ export default function PesertaDaftarSeminarScreen() {
         <Ionicons name="search-outline" size={16} color={DesignColors.slateGray} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Cari seminar atau workshop..."
+          placeholder="Cari seminar atau narasumber..."
           placeholderTextColor={DesignColors.slateGray}
           value={search}
           onChangeText={setSearch}
         />
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
-        {CATEGORIES.map((cat) => {
-          const active = cat === category;
-          return (
-            <TouchableOpacity key={cat} style={[styles.categoryChip, active && styles.categoryChipActive]} onPress={() => setCategory(cat)}>
-              <Text style={[styles.categoryText, active && styles.categoryTextActive]}>{cat}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {filtered.length === 0 ? (
-          <EmptyState icon="calendar-outline" title="Seminar tidak ditemukan" message="Coba kata kunci lain atau ubah kategori." />
-        ) : (
-          filtered.map((item) => {
-            const kuotaPct = Math.min(100, Math.round((item.terisi / item.kuota) * 100));
-            return (
+      {loading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={DesignColors.gold} />
+          <Text style={styles.loadingText}>Memuat seminar...</Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon="calendar-outline"
+              title="Seminar tidak ditemukan"
+              message={
+                list.length === 0
+                  ? 'Belum ada seminar yang tersedia saat ini.'
+                  : 'Coba kata kunci yang berbeda.'
+              }
+            />
+          ) : (
+            filtered.map(item => (
               <View key={item.id} style={styles.card}>
                 <Image source={{ uri: item.image }} style={styles.cardImage} />
+
+                {/* Status badge */}
+                <View style={[
+                  styles.statusBadge,
+                  item.status === 'aktif' ? styles.badgeAktif : styles.badgeSelesai,
+                ]}>
+                  <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+                </View>
+
                 <View style={styles.cardInfo}>
-                  <Text style={styles.kategoriTag}>{item.kategori.toUpperCase()}</Text>
                   <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
                   <View style={styles.detailRow}>
                     <Ionicons name="person-outline" size={12} color={DesignColors.slateGray} />
-                    <Text style={styles.detailText}>{item.narasumber}</Text>
+                    <Text style={styles.detailText}>{item.lecturer}</Text>
                   </View>
                   <View style={styles.detailRow}>
                     <Ionicons name="calendar-outline" size={12} color={DesignColors.slateGray} />
-                    <Text style={styles.detailText}>{item.tanggal}</Text>
+                    <Text style={styles.detailText}>{item.date}</Text>
                   </View>
-
-                  <View style={styles.quotaTrack}>
-                    <View style={[styles.quotaFill, { width: `${kuotaPct}%` }]} />
-                  </View>
-                  <Text style={styles.quotaText}>{item.terisi}/{item.kuota} kuota terisi</Text>
 
                   <TouchableOpacity
-                    style={[styles.registerBtn, item.registered && styles.registerBtnDone]}
-                    onPress={() => !item.registered && handleRegister(item.id)}
-                    disabled={item.registered}
+                    style={[
+                      styles.registerBtn,
+                      (item.registered || item.status === 'selesai') && styles.registerBtnDone,
+                    ]}
+                    onPress={() => !item.registered && item.status !== 'selesai' && handleRegister(item.id)}
+                    disabled={item.registered || item.status === 'selesai'}
                   >
-                    <Text style={[styles.registerBtnText, item.registered && styles.registerBtnTextDone]}>
-                      {item.registered ? 'Terdaftar' : 'Daftar Sekarang'}
+                    <Text style={[
+                      styles.registerBtnText,
+                      (item.registered || item.status === 'selesai') && styles.registerBtnTextDone,
+                    ]}>
+                      {item.registered
+                        ? 'Terdaftar'
+                        : item.status === 'selesai'
+                        ? 'Seminar Selesai'
+                        : 'Daftar Sekarang'}
                     </Text>
                   </TouchableOpacity>
                 </View>
               </View>
-            );
-          })
-        )}
-      </ScrollView>
+            ))
+          )}
+        </ScrollView>
+      )}
     </PesertaScaffold>
   );
 }
 
 const styles = StyleSheet.create({
+  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { fontSize: 13, color: DesignColors.slateGray },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -153,23 +227,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     marginHorizontal: 20,
     marginTop: 16,
+    marginBottom: 4,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   searchInput: { flex: 1, fontSize: 13, color: DesignColors.charcoal },
-  categoryRow: { marginTop: 12, paddingLeft: 20 },
-  categoryChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: DesignColors.borderLight,
-    backgroundColor: DesignColors.ivoryCard,
-    marginRight: 8,
-  },
-  categoryChipActive: { backgroundColor: DesignColors.navyDeep, borderColor: DesignColors.navyDeep },
-  categoryText: { fontSize: 11, fontWeight: '600', color: DesignColors.slateGray },
-  categoryTextActive: { color: DesignColors.gold },
   scrollContent: { padding: 20, paddingBottom: 32 },
   card: {
     backgroundColor: DesignColors.ivoryCard,
@@ -180,16 +242,33 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardImage: { width: '100%', height: 130 },
+  statusBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
+  },
+  badgeAktif: { backgroundColor: 'rgba(16,185,129,0.9)' },
+  badgeSelesai: { backgroundColor: 'rgba(239,68,68,0.85)' },
+  statusText: { fontSize: 9, fontWeight: '800', color: '#FFF', letterSpacing: 0.6 },
   cardInfo: { padding: 14 },
-  kategoriTag: { fontSize: 9, fontWeight: '700', color: DesignColors.gold, letterSpacing: 0.6, marginBottom: 6 },
   title: { fontSize: 14, fontWeight: '700', color: DesignColors.navyDeep, lineHeight: 19, marginBottom: 8 },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  detailText: { fontSize: 11, color: DesignColors.slateGray },
-  quotaTrack: { height: 5, backgroundColor: DesignColors.offWhite, borderRadius: 3, marginTop: 10, overflow: 'hidden' },
-  quotaFill: { height: '100%', backgroundColor: DesignColors.gold, borderRadius: 3 },
-  quotaText: { fontSize: 10, color: DesignColors.slateGray, marginTop: 4, marginBottom: 12 },
-  registerBtn: { backgroundColor: DesignColors.gold, borderRadius: Radius.md, paddingVertical: 11, alignItems: 'center' },
-  registerBtnDone: { backgroundColor: DesignColors.offWhite, borderWidth: 1, borderColor: DesignColors.borderLight },
+  detailText: { fontSize: 11, color: DesignColors.slateGray, flex: 1 },
+  registerBtn: {
+    backgroundColor: DesignColors.gold,
+    borderRadius: Radius.md,
+    paddingVertical: 11,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  registerBtnDone: {
+    backgroundColor: DesignColors.offWhite,
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+  },
   registerBtnText: { fontSize: 13, fontWeight: '700', color: DesignColors.navyDeep },
   registerBtnTextDone: { color: DesignColors.slateGray },
 });

@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import React, { useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PesertaScaffold } from '../../components/peserta/pesertachrome';
-import { auth } from '../../config/firebase';
+import { auth, db } from '../../config/firebase';
 import { DesignColors, Radius } from '../../constants/theme';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
 interface MenuItem {
   key: string;
@@ -23,6 +24,48 @@ export default function PesertaProfilScreen() {
   const user = auth.currentUser;
   const displayName = user?.displayName || 'Peserta';
   const email = user?.email || 'peserta@certifyelite.id';
+
+  const [jumlahSeminar, setJumlahSeminar] = useState(0);
+  const [jumlahSertifikat, setJumlahSertifikat] = useState(0);
+  const [persenKehadiran, setPersenKehadiran] = useState('0%');
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  useEffect(() => {
+    loadProfileStats();
+  }, [user?.uid]);
+
+  const loadProfileStats = async () => {
+    const uid = user?.uid;
+    if (!uid) {
+      setLoadingStats(false);
+      return;
+    }
+    setLoadingStats(true);
+    try {
+      // 1. Jumlah Seminar (Pendaftaran)
+      const regSnap = await getDocs(
+        query(collection(db, 'pendaftaran'), where('pesertaId', '==', uid))
+      );
+      setJumlahSeminar(regSnap.size);
+
+      // 2. Jumlah Sertifikat
+      const certSnap = await getDocs(
+        query(collection(db, 'sertifikat'), where('pesertaId', '==', uid))
+      );
+      setJumlahSertifikat(certSnap.size);
+
+      // 3. Kehadiran (Absensi)
+      const absSnap = await getDocs(
+        query(collection(db, 'absensi'), where('pesertaId', '==', uid))
+      );
+      const percentage = regSnap.size > 0 ? Math.round((absSnap.size / regSnap.size) * 100) : 0;
+      setPersenKehadiran(`${percentage}%`);
+    } catch (error) {
+      console.error('Error loading profile stats:', error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('Konfirmasi Keluar', 'Apakah Anda yakin ingin keluar dari akun?', [
@@ -86,7 +129,13 @@ export default function PesertaProfilScreen() {
 
   return (
     <PesertaScaffold title="Profil Saya">
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={loadingStats} onRefresh={loadProfileStats} />
+        }
+      >
         <View style={styles.identityCard}>
           <View style={styles.avatarRing}>
             <Image
@@ -104,17 +153,23 @@ export default function PesertaProfilScreen() {
 
         <View style={styles.quickStatsRow}>
           <View style={styles.quickStat}>
-            <Text style={styles.quickStatValue}>6</Text>
+            <Text style={styles.quickStatValue}>
+              {loadingStats ? '—' : jumlahSeminar}
+            </Text>
             <Text style={styles.quickStatLabel}>Seminar Diikuti</Text>
           </View>
           <View style={styles.quickStatDivider} />
           <View style={styles.quickStat}>
-            <Text style={styles.quickStatValue}>2</Text>
+            <Text style={styles.quickStatValue}>
+              {loadingStats ? '—' : jumlahSertifikat}
+            </Text>
             <Text style={styles.quickStatLabel}>Sertifikat</Text>
           </View>
           <View style={styles.quickStatDivider} />
           <View style={styles.quickStat}>
-            <Text style={styles.quickStatValue}>92%</Text>
+            <Text style={styles.quickStatValue}>
+              {loadingStats ? '—' : persenKehadiran}
+            </Text>
             <Text style={styles.quickStatLabel}>Kehadiran</Text>
           </View>
         </View>

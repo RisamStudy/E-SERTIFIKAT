@@ -2,671 +2,421 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { signOut } from 'firebase/auth';
+import {
+    collection,
+    getDocs,
+    query,
+    where
+} from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useColorScheme,
-  View,
+    ActivityIndicator,
+    Alert,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { auth } from '../../config/firebase';
-import { PesertaBottomNav } from '@/components/peserta/pesertachrome';
+import { PesertaBottomNav } from '../../components/peserta/pesertachrome';
+import { auth, db } from '../../config/firebase';
+import { DesignColors } from '../../constants/theme';
+
+interface SeminarItem {
+  id: string;
+  title: string;
+  date: string;
+  lecturer: string;
+}
+
+interface SertifikatItem {
+  id: string;
+  seminarTitle: string;
+  tanggalTerbit: string;
+  idSertifikat: string;
+}
 
 export default function PesertaDashboard() {
   const router = useRouter();
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
 
-  const [userName, setUserName] = useState('Participant');
-  const [loading, setLoading] = useState(false);
+  const [userName, setUserName] = useState('Peserta');
+  const [logoutLoading, setLogoutLoading] = useState(false);
+
+  const [jumlahSeminar, setJumlahSeminar] = useState(0);
+  const [jumlahSertifikat, setJumlahSertifikat] = useState(0);
+  const [seminarMendatang, setSeminarMendatang] = useState<SeminarItem[]>([]);
+  const [sertifikatTerbaru, setSertifikatTerbaru] = useState<SertifikatItem | null>(null);
+  const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
     const user = auth.currentUser;
     if (user) {
-      setUserName(user.displayName || user.email || 'Participant');
+      setUserName(user.displayName || user.email || 'Peserta');
     }
+    loadDashboardData(user?.uid);
   }, []);
 
-  const handleLogout = async () => {
+  const loadDashboardData = async (uid?: string) => {
+    setLoadingData(true);
+    try {
+      // Ambil semua seminar, filter dan sort di client
+      const semSnap = await getDocs(query(collection(db, 'seminar')));
+      const semList: SeminarItem[] = semSnap.docs
+        .map(d => ({
+          id: d.id,
+          title: (d.data() as { title: string }).title,
+          date: (d.data() as { date?: string }).date ?? '—',
+          lecturer: (d.data() as { lecturer?: string }).lecturer ?? '—',
+          status: (d.data() as { status?: string }).status ?? '',
+          createdAt: (d.data() as { createdAt?: string }).createdAt ?? '',
+        }))
+        .filter(d => d.status === 'aktif')
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 3)
+        .map(({ id, title, date, lecturer }) => ({ id, title, date, lecturer }));
+      setSeminarMendatang(semList);
+
+      if (uid) {
+        // Jumlah seminar yang didaftarkan peserta
+        const regSnap = await getDocs(
+          query(collection(db, 'pendaftaran'), where('pesertaId', '==', uid))
+        );
+        setJumlahSeminar(regSnap.size);
+
+        // Sertifikat milik peserta ini
+        // Tanpa orderBy untuk menghindari composite index requirement
+        const certSnap = await getDocs(
+          query(
+            collection(db, 'sertifikat'),
+            where('pesertaId', '==', uid)
+          )
+        );
+        // Sort di client
+        const certDocs = certSnap.docs.sort((a, b) => {
+          const aTime = (a.data() as { createdAt?: string }).createdAt ?? '';
+          const bTime = (b.data() as { createdAt?: string }).createdAt ?? '';
+          return bTime.localeCompare(aTime);
+        });
+        setJumlahSertifikat(certDocs.length);
+        if (certDocs.length > 0) {
+          const d = certDocs[0];
+          setSertifikatTerbaru({
+            id: d.id,
+            seminarTitle: (d.data() as { seminarTitle: string }).seminarTitle,
+            tanggalTerbit: (d.data() as { tanggalTerbit: string }).tanggalTerbit,
+            idSertifikat: (d.data() as { idSertifikat: string }).idSertifikat,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('loadDashboardData error:', err);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const handleLogout = () => {
     Alert.alert('Konfirmasi Keluar', 'Apakah Anda yakin ingin keluar?', [
       { text: 'Batal', style: 'cancel' },
       {
         text: 'Keluar',
         style: 'destructive',
         onPress: async () => {
-          setLoading(true);
+          setLogoutLoading(true);
           try {
             await signOut(auth);
             router.replace('/login');
           } catch {
             Alert.alert('Error', 'Gagal keluar dari sesi.');
           } finally {
-            setLoading(false);
+            setLogoutLoading(false);
           }
         },
       },
     ]);
   };
 
-  // Theme colors
-  const bgTheme = isDark ? '#0F1B2D' : '#F5F3EE';
-  const cardBgTheme = isDark ? '#16273F' : '#FFFFFF';
-  const textTheme = isDark ? '#F5F3EE' : '#0F1B2D';
-  const subtitleTheme = isDark ? '#8A8F98' : '#5C6470';
-  const borderTheme = isDark ? '#233A5C' : '#F5F3EE';
-  const primaryTheme = '#C9A24B'; // Premium Gold
-
   return (
-    <View style={[styles.container, { backgroundColor: bgTheme }]}>
+    <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* 1. Header Bar Portal Seminar (Dark Blue) */}
+      {/* Header */}
       <View style={styles.headerBar}>
         <View style={styles.headerLeft}>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80' }}
-            style={styles.avatar}
-          />
+          <View style={styles.avatarCircle}>
+            <Ionicons name="person" size={20} color={DesignColors.gold} />
+          </View>
           <Text style={styles.headerTitle}>Seminar Portal</Text>
         </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerIconBtn}>
-            <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.headerIconBtn, { marginLeft: 12 }]} onPress={handleLogout} disabled={loading}>
-            {loading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Ionicons name="log-out-outline" size={22} color="#B3413A" />
-            )}
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.headerIconBtn}
+          onPress={handleLogout}
+          disabled={logoutLoading}
+        >
+          {logoutLoading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Ionicons name="log-out-outline" size={22} color={DesignColors.statusRed} />
+          )}
+        </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* 2. Welcome Title */}
-        <View style={styles.welcomeSection}>
-          <Text style={[styles.welcomeTitle, { color: textTheme }]}>Selamat Datang, {userName}</Text>
-          <Text style={[styles.welcomeSubtitle, { color: subtitleTheme }]}>
-            Berikut adalah rangkuman aktivitas akademik Anda minggu ini.
-          </Text>
-        </View>
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Welcome */}
+        <Text style={styles.welcomeTitle}>Selamat Datang,</Text>
+        <Text style={styles.welcomeName}>{userName}</Text>
 
-        {/* 3. Stat Cards Section (Vertical Stack) */}
-        <View style={styles.statsContainer}>
-          {/* Card 1: Seminar Terdaftar */}
-          <View style={[styles.statCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
-            <View style={styles.statCardHeader}>
-              <View style={styles.statIconContainer}>
-                <Ionicons name="calendar-outline" size={24} color="#0F1B2D" />
-              </View>
-              <Text style={[styles.statCardLabel, { color: subtitleTheme }]}>Seminar Terdaftar</Text>
+        {/* Stat Cards */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <View style={styles.statIcon}>
+              <Ionicons name="calendar-outline" size={20} color={DesignColors.navyDeep} />
             </View>
-            <View style={styles.statCardBody}>
-              <Text style={[styles.statCardValue, { color: primaryTheme }]}>12</Text>
-              <Text style={[styles.statCardSubtext, { color: subtitleTheme }]}>+2 dari bulan lalu</Text>
-            </View>
-          </View>
-
-          {/* Card 2: Sertifikat Tersedia */}
-          <View style={[styles.statCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
-            <View style={styles.statCardHeader}>
-              <View style={styles.statIconContainer}>
-                <Ionicons name="ribbon-outline" size={24} color="#0F1B2D" />
-              </View>
-              <Text style={[styles.statCardLabel, { color: subtitleTheme }]}>Sertifikat Tersedia</Text>
-            </View>
-            <View style={styles.statCardBody}>
-              <Text style={[styles.statCardValue, { color: primaryTheme }]}>08</Text>
-              <Text style={[styles.statCardSubtext, { color: subtitleTheme }]}>Siap untuk diunduh</Text>
-            </View>
-          </View>
-
-          {/* Card 3: Skor Kehadiran (Dark Blue Background) */}
-          <View style={[styles.statCardDark, { backgroundColor: '#0F1B2D' }]}>
-            {/* Subtle Toga Watermark */}
-            <View style={styles.watermarkContainer}>
-              <Ionicons name="school" size={130} color="rgba(255, 255, 255, 0.04)" />
-            </View>
-
-            <View style={styles.statCardHeader}>
-              <View style={[styles.statIconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]}>
-                <Ionicons name="shield-checkmark-outline" size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.statCardLabelDark}>Skor Kehadiran</Text>
-            </View>
-            <View style={styles.statCardBody}>
-              <Text style={[styles.statCardValue, { color: primaryTheme }]}>95%</Text>
-              <Text style={styles.statCardSubtextDark}>Sangat Baik</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* 4. Seminar Mendatang Section */}
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionHeaderLeft}>
-            <Ionicons name="time-outline" size={20} color="#0F1B2D" style={styles.sectionHeaderIcon} />
-            <Text style={[styles.sectionTitle, { color: textTheme }]}>Seminar Mendatang</Text>
-          </View>
-          <TouchableOpacity>
-            <Text style={[styles.seeAllLink, { color: primaryTheme }]}>Lihat Semua</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Seminar List Stack */}
-        <View style={styles.seminarList}>
-          {/* Seminar 1 */}
-          <View style={[styles.seminarCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
-            <View style={styles.seminarCardLeft}>
-              <View style={[styles.dateBadge, { backgroundColor: '#0F1B2D' }]}>
-                <Text style={styles.dateBadgeMonth}>MEI</Text>
-                <Text style={styles.dateBadgeDay}>24</Text>
-              </View>
-              <View style={styles.seminarInfo}>
-                <Text style={[styles.seminarTitle, { color: textTheme }]} numberOfLines={1}>
-                  Transformasi Digital di Era AI
-                </Text>
-                <View style={styles.metaRow}>
-                  <Ionicons name="location-outline" size={12} color={subtitleTheme} style={styles.metaIcon} />
-                  <Text style={[styles.metaText, { color: subtitleTheme }]} numberOfLines={1}>
-                    Auditorium Utama & Online (Hybrid)
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <TouchableOpacity style={[styles.arrowButton, { borderColor: borderTheme }]}>
-              <Ionicons name="chevron-forward" size={16} color={subtitleTheme} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Seminar 2 */}
-          <View style={[styles.seminarCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
-            <View style={styles.seminarCardLeft}>
-              <View style={[styles.dateBadge, { backgroundColor: '#DCD7CB' }]}>
-                <Text style={[styles.dateBadgeMonth, { color: '#8A8F98' }]}>JUN</Text>
-                <Text style={[styles.dateBadgeDay, { color: '#1F2937' }]}>02</Text>
-              </View>
-              <View style={styles.seminarInfo}>
-                <Text style={[styles.seminarTitle, { color: textTheme }]} numberOfLines={1}>
-                  Metodologi Riset Kuantitatif Tingkat Lanjut
-                </Text>
-                <View style={styles.metaRow}>
-                  <Ionicons name="videocam-outline" size={12} color={subtitleTheme} style={styles.metaIcon} />
-                  <Text style={[styles.metaText, { color: subtitleTheme }]} numberOfLines={1}>
-                    Zoom Meeting ID: 452 983 234
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <TouchableOpacity style={[styles.arrowButton, { borderColor: borderTheme }]}>
-              <Ionicons name="chevron-forward" size={16} color={subtitleTheme} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Seminar 3 */}
-          <View style={[styles.seminarCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
-            <View style={styles.seminarCardLeft}>
-              <View style={[styles.dateBadge, { backgroundColor: '#DCD7CB' }]}>
-                <Text style={[styles.dateBadgeMonth, { color: '#8A8F98' }]}>JUN</Text>
-                <Text style={[styles.dateBadgeDay, { color: '#1F2937' }]}>15</Text>
-              </View>
-              <View style={styles.seminarInfo}>
-                <Text style={[styles.seminarTitle, { color: textTheme }]} numberOfLines={1}>
-                  Etika Profesional dalam Dunia Akademik
-                </Text>
-                <View style={styles.metaRow}>
-                  <Ionicons name="location-outline" size={12} color={subtitleTheme} style={styles.metaIcon} />
-                  <Text style={[styles.metaText, { color: subtitleTheme }]} numberOfLines={1}>
-                    Ruang Seminar Lantai 4
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <TouchableOpacity style={[styles.arrowButton, { borderColor: borderTheme }]}>
-              <Ionicons name="chevron-forward" size={16} color={subtitleTheme} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* 5. Sertifikat Terbaru Section */}
-        <View style={[styles.sectionHeader, { marginTop: 24 }]}>
-          <Text style={[styles.sectionTitle, { color: textTheme }]}>Sertifikat Terbaru</Text>
-          <TouchableOpacity>
-            <Text style={[styles.seeAllLink, { color: primaryTheme }]}>Unduh PDF</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Certificate Preview Card */}
-        <View style={[styles.certPreviewCard, { backgroundColor: cardBgTheme, borderColor: borderTheme }]}>
-          <View style={styles.certInnerBorder}>
-            <Text style={styles.certMainTitle}>CERTIFICATE OF EXCELLENCE</Text>
-            <Text style={styles.certSubtitle}>This is to certify that</Text>
-            
-            <Text style={styles.certName} numberOfLines={1}>{userName}</Text>
-            
-            <Text style={styles.certDesc}>
-              has successfully completed the seminar on{'\n'}
-              <Text style={styles.certBoldText}>Advanced Data Science Principles</Text>{'\n'}
-              conducted on May 10, 2024
+            <Text style={styles.statValue}>
+              {loadingData ? '—' : jumlahSeminar}
             </Text>
+            <Text style={styles.statLabel}>Seminar Terdaftar</Text>
+          </View>
 
-            <View style={styles.certFooter}>
-              <View style={styles.certSignContainer}>
-                <Image
-                  source={require('../../assets/tanda_tangan.png')}
-                  style={styles.signatureImage}
-                  resizeMode="contain"
-                />
-                <View style={styles.signLine} />
-                <Text style={styles.certSignLabel}>DEAN OF ACADEMIC</Text>
-              </View>
-
-              {/* Styled CSS Golden Seal Stamp */}
-              <View style={[styles.sealStamp, { borderColor: primaryTheme }]}>
-                <View style={[styles.sealStampInner, { borderColor: primaryTheme }]}>
-                  <Text style={[styles.sealStampText, { color: primaryTheme }]}>OFFICIAL</Text>
-                  <Text style={[styles.sealStampText, { color: primaryTheme }]}>SEAL</Text>
-                </View>
-              </View>
+          <View style={styles.statCard}>
+            <View style={styles.statIcon}>
+              <Ionicons name="ribbon-outline" size={20} color={DesignColors.navyDeep} />
             </View>
+            <Text style={styles.statValue}>
+              {loadingData ? '—' : jumlahSertifikat}
+            </Text>
+            <Text style={styles.statLabel}>Sertifikat Diterima</Text>
           </View>
         </View>
 
-        {/* 6. Gold Button */}
-        <TouchableOpacity style={[styles.listAllBtn, { backgroundColor: '#E4CE8F' }]}>
-          <Ionicons name="download-outline" size={20} color="#FFFFFF" style={styles.btnIcon} />
-          <Text style={styles.listAllBtnText}>LIHAT SEMUA SERTIFIKAT</Text>
-        </TouchableOpacity>
+        {/* Seminar Mendatang */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Seminar Tersedia</Text>
+          <TouchableOpacity onPress={() => router.push('/peserta/daftar_seminar')}>
+            <Text style={styles.seeAll}>Lihat Semua</Text>
+          </TouchableOpacity>
+        </View>
+
+        {loadingData ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={DesignColors.gold} />
+          </View>
+        ) : seminarMendatang.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Ionicons name="calendar-outline" size={28} color={DesignColors.slateGray} />
+            <Text style={styles.emptyText}>Belum ada seminar aktif</Text>
+          </View>
+        ) : (
+          seminarMendatang.map(item => (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.seminarCard}
+              activeOpacity={0.8}
+              onPress={() => router.push('/peserta/daftar_seminar')}
+            >
+              <View style={styles.seminarCardLeft}>
+                <View style={styles.seminarIconWrap}>
+                  <Ionicons name="desktop-outline" size={18} color={DesignColors.gold} />
+                </View>
+                <View style={styles.seminarInfo}>
+                  <Text style={styles.seminarTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={styles.seminarMeta} numberOfLines={1}>
+                    {item.lecturer} • {item.date}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={DesignColors.slateGray} />
+            </TouchableOpacity>
+          ))
+        )}
+
+        {/* Sertifikat Terbaru */}
+        <View style={[styles.sectionRow, { marginTop: 24 }]}>
+          <Text style={styles.sectionTitle}>Sertifikat Terbaru</Text>
+          <TouchableOpacity onPress={() => router.push('/peserta/sertifikat')}>
+            <Text style={styles.seeAll}>Lihat Semua</Text>
+          </TouchableOpacity>
+        </View>
+
+        {loadingData ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={DesignColors.gold} />
+          </View>
+        ) : sertifikatTerbaru === null ? (
+          <View style={styles.emptyBox}>
+            <Ionicons name="ribbon-outline" size={28} color={DesignColors.slateGray} />
+            <Text style={styles.emptyText}>Belum ada sertifikat</Text>
+            <Text style={styles.emptySubtext}>
+              Ikuti seminar untuk mendapatkan sertifikat digital
+            </Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.certCard}
+            activeOpacity={0.85}
+            onPress={() =>
+              router.push({
+                pathname: '/peserta/download_sertifikat',
+                params: { id: sertifikatTerbaru.id },
+              })
+            }
+          >
+            {/* Cert preview inner */}
+            <View style={styles.certInner}>
+              <View style={styles.certLogoRow}>
+                <Ionicons name="ribbon" size={18} color={DesignColors.gold} />
+                <Text style={styles.certKicker}>CERTIFYELITE</Text>
+              </View>
+              <Text style={styles.certHeading}>SERTIFIKAT</Text>
+              <Text style={styles.certGiven}>Diberikan kepada</Text>
+              <Text style={styles.certName} numberOfLines={1}>{userName}</Text>
+              <Text style={styles.certSeminar} numberOfLines={2}>
+                {sertifikatTerbaru.seminarTitle}
+              </Text>
+              <View style={styles.certFooter}>
+                <Text style={styles.certId}>{sertifikatTerbaru.idSertifikat}</Text>
+                <Text style={styles.certDate}>{sertifikatTerbaru.tanggalTerbit}</Text>
+              </View>
+            </View>
+            <View style={styles.certAction}>
+              <Ionicons name="download-outline" size={16} color={DesignColors.navyDeep} />
+              <Text style={styles.certActionText}>Lihat & Unduh</Text>
+            </View>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
-      {/* 7. Bottom Navigation Bar */}
       <PesertaBottomNav />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: DesignColors.offWhite },
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#0F1B2D',
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    backgroundColor: DesignColors.navyDeep,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 55 : 40,
     paddingBottom: 16,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    marginRight: 12,
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerIconBtn: {
-    padding: 4,
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  welcomeSection: {
-    marginBottom: 20,
-  },
-  welcomeTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-  welcomeSubtitle: {
-    fontSize: 12,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  statsContainer: {
-    marginBottom: 24,
-  },
-  statCard: {
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatarCircle: {
+    width: 36,
+    height: 36,
     borderRadius: 18,
-    borderWidth: 1,
-    padding: 18,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.02,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 1,
-      },
-      web: {
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.01)',
-      },
-    }),
-  },
-  statCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  statIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F5F3EE',
+    borderWidth: 1.5,
+    borderColor: DesignColors.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
   },
-  statCardLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+  headerTitle: { color: '#FFF', fontSize: 17, fontWeight: '700' },
+  headerIconBtn: { padding: 4 },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 20, paddingBottom: 32 },
+  welcomeTitle: { fontSize: 13, color: DesignColors.slateGray, marginBottom: 2 },
+  welcomeName: { fontSize: 22, fontWeight: '800', color: DesignColors.navyDeep, marginBottom: 20 },
+
+  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 28 },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+    padding: 16,
+    alignItems: 'flex-start',
   },
-  statCardBody: {
-    alignItems: 'flex-end',
-  },
-  statCardValue: {
-    fontSize: 26,
-    fontWeight: '800',
-  },
-  statCardSubtext: {
-    fontSize: 10,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  statCardDark: {
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  statIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: DesignColors.offWhite,
     alignItems: 'center',
-    position: 'relative',
-    overflow: 'hidden',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
-  watermarkContainer: {
-    position: 'absolute',
-    right: -10,
-    bottom: -20,
-    zIndex: 0,
-  },
-  statCardLabelDark: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  statCardSubtextDark: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#5C6470',
-    marginTop: 2,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
+  statValue: { fontSize: 28, fontWeight: '800', color: DesignColors.gold },
+  statLabel: { fontSize: 11, color: DesignColors.slateGray, marginTop: 2 },
+
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: DesignColors.navyDeep },
+  seeAll: { fontSize: 12, fontWeight: '700', color: DesignColors.gold },
+
+  loadingRow: { paddingVertical: 20, alignItems: 'center' },
+  emptyBox: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+    paddingVertical: 28,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  sectionHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  sectionHeaderIcon: {
-    marginRight: 8,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  seeAllLink: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  seminarList: {
+    gap: 8,
     marginBottom: 8,
   },
+  emptyText: { fontSize: 13, color: DesignColors.slateGray, fontWeight: '600' },
+  emptySubtext: { fontSize: 11, color: DesignColors.slateGray, textAlign: 'center', paddingHorizontal: 24 },
+
   seminarCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 12,
-    marginBottom: 10,
-    ...Platform.select({
-      web: {
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.01)',
-      },
-    }),
-  },
-  seminarCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 12,
-  },
-  dateBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  dateBadgeMonth: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  dateBadgeDay: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
-    marginTop: 1,
-  },
-  seminarInfo: {
-    flex: 1,
-  },
-  seminarTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  metaIcon: {
-    marginRight: 4,
-  },
-  metaText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  arrowButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FBFAF6',
-  },
-  certPreviewCard: {
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: '0 6px 16px rgba(0, 0, 0, 0.04)',
-      },
-    }),
-  },
-  certInnerBorder: {
-    borderWidth: 1.5,
-    borderColor: '#F5F3EE',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-  },
-  certMainTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    color: '#0F1B2D',
-    textAlign: 'center',
-  },
-  certSubtitle: {
-    fontSize: 9,
-    fontStyle: 'italic',
-    color: '#5C6470',
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  certName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0F1B2D',
-    marginTop: 8,
-    marginBottom: 8,
-    textAlign: 'center',
-    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', web: 'Georgia, serif' }),
-  },
-  certDesc: {
-    fontSize: 8.5,
-    lineHeight: 14,
-    color: '#5C6470',
-    textAlign: 'center',
-    paddingHorizontal: 8,
-  },
-  certBoldText: {
-    fontWeight: '700',
-    color: '#0F1B2D',
-  },
-  certFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    marginTop: 20,
-    paddingHorizontal: 8,
-  },
-  certSignContainer: {
-    alignItems: 'center',
-    width: 100,
-  },
-  signatureImage: {
-    width: 70,
-    height: 30,
-    marginBottom: -4,
-  },
-  signLine: {
-    width: '100%',
-    height: 1,
-    backgroundColor: '#DCD7CB',
-    marginVertical: 4,
-  },
-  certSignLabel: {
-    fontSize: 7,
-    fontWeight: '700',
-    color: '#5C6470',
-  },
-  sealStamp: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 2,
-  },
-  sealStampInner: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 25,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    transform: [{ rotate: '-12deg' }],
-  },
-  sealStampText: {
-    fontSize: 6.5,
-    fontWeight: '800',
-    lineHeight: 8,
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  listAllBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 52,
+    backgroundColor: '#FFF',
     borderRadius: 14,
-    marginBottom: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#C9A24B',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.25,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+    padding: 14,
+    marginBottom: 10,
   },
-  btnIcon: {
-    marginRight: 8,
+  seminarCardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 8 },
+  seminarIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: DesignColors.offWhite,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  listAllBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
+  seminarInfo: { flex: 1 },
+  seminarTitle: { fontSize: 13, fontWeight: '700', color: DesignColors.navyDeep, lineHeight: 18 },
+  seminarMeta: { fontSize: 11, color: DesignColors.slateGray, marginTop: 3 },
 
+  certCard: {
+    backgroundColor: DesignColors.ivoryCard,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: DesignColors.gold,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  certInner: {
+    padding: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: DesignColors.borderLight,
+    alignItems: 'center',
+  },
+  certLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  certKicker: { fontSize: 9, fontWeight: '700', color: DesignColors.slateGray, letterSpacing: 1.5 },
+  certHeading: { fontSize: 18, fontWeight: '800', color: DesignColors.navyDeep, letterSpacing: 3, marginBottom: 10 },
+  certGiven: { fontSize: 10, color: DesignColors.slateGray, marginBottom: 4 },
+  certName: { fontSize: 18, fontWeight: '700', fontStyle: 'italic', color: DesignColors.navyDeep, marginBottom: 6 },
+  certSeminar: { fontSize: 10, color: DesignColors.charcoal, textAlign: 'center', lineHeight: 15, paddingHorizontal: 10 },
+  certFooter: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 14 },
+  certId: { fontSize: 9, color: DesignColors.slateGray, fontWeight: '600' },
+  certDate: { fontSize: 9, color: DesignColors.slateGray },
+  certAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: DesignColors.gold,
+    paddingVertical: 12,
+  },
+  certActionText: { fontSize: 13, fontWeight: '700', color: DesignColors.navyDeep },
 });

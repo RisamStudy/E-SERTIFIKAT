@@ -4,18 +4,21 @@ import { StatusBar } from 'expo-status-bar';
 import { signOut } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { auth } from '../../config/firebase';
+import { AdminBottomNav } from '../../components/admin/adminchrome';
+import { auth, db } from '../../config/firebase';
 import { DesignColors, Radius } from '../../constants/theme';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
 interface StatItem {
   key: string;
@@ -42,12 +45,86 @@ export default function AdminDashboard() {
   const [adminName, setAdminName] = useState('Admin');
   const [loading, setLoading] = useState(false);
 
+  const [totalSeminar, setTotalSeminar] = useState(0);
+  const [totalPeserta, setTotalPeserta] = useState(0);
+  const [totalSertifikat, setTotalSertifikat] = useState(0);
+  const [kehadiranRataRata, setKehadiranRataRata] = useState('0%');
+  const [seminarList, setSeminarList] = useState<SeminarItem[]>([]);
+  const [loadingStats, setLoadingStats] = useState(true);
+
   useEffect(() => {
     const user = auth.currentUser;
     if (user) {
       setAdminName(user.displayName || user.email || 'Admin');
     }
+    loadStatsData();
   }, []);
+
+  const loadStatsData = async () => {
+    setLoadingStats(true);
+    try {
+      // 1. Total Seminar
+      const semSnap = await getDocs(collection(db, 'seminar'));
+      setTotalSeminar(semSnap.size);
+
+      // 2. Total Peserta (users with role 'peserta')
+      const userSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'peserta')));
+      setTotalPeserta(userSnap.size);
+
+      // 3. Sertifikat Terbit
+      const certSnap = await getDocs(collection(db, 'sertifikat'));
+      setTotalSertifikat(certSnap.size);
+
+      // 4. Kehadiran Rata-rata
+      const absSnap = await getDocs(collection(db, 'absensi'));
+      const regSnap = await getDocs(collection(db, 'pendaftaran'));
+      const avgKehadiran = regSnap.size > 0 ? Math.round((absSnap.size / regSnap.size) * 100) : 0;
+      setKehadiranRataRata(`${avgKehadiran}%`);
+
+      // 5. Seminar Berjalan (Ambil 3 seminar terbaru)
+      const sortedSeminars = semSnap.docs
+        .map(d => ({ id: d.id, ...d.data() } as any))
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+        .slice(0, 3);
+
+      const semListWithCounts = await Promise.all(
+        sortedSeminars.map(async (sem): Promise<SeminarItem> => {
+          const semRegSnap = await getDocs(
+            query(collection(db, 'pendaftaran'), where('seminarId', '==', sem.id))
+          );
+          const participantCount = semRegSnap.size;
+
+          const avatars = [
+            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&q=80',
+            'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=100&q=80',
+            'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=100&q=80',
+          ].slice(0, Math.min(participantCount, 3));
+
+          const extraCount = participantCount > 3 ? `+${participantCount - 3}` : '';
+          const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80';
+
+          return {
+            id: sem.id,
+            title: sem.title || 'Seminar',
+            image: sem.image || FALLBACK_IMAGE,
+            status: sem.status === 'selesai' ? 'UPCOMING' : 'ACTIVE',
+            participantCount: `${participantCount} Peserta Terdaftar`,
+            date: sem.date || '—',
+            avatars,
+            extraCount,
+            actionLabel: 'Kelola',
+            onAction: () => router.push('/admin/pendaftaran'),
+          };
+        })
+      );
+
+      setSeminarList(semListWithCounts);
+    } catch (error) {
+      console.error('Error loading admin stats:', error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('Konfirmasi Keluar', 'Apakah Anda yakin ingin keluar?', [
@@ -71,45 +148,10 @@ export default function AdminDashboard() {
   };
 
   const stats: StatItem[] = [
-    { key: 'seminar', icon: 'document-text-outline', label: 'TOTAL SEMINAR', value: '42' },
-    { key: 'peserta', icon: 'people-outline', label: 'TOTAL PESERTA', value: '12,840' },
-    { key: 'sertifikat', icon: 'ribbon-outline', label: 'SERTIFIKAT TERBIT', value: '11,205' },
-    { key: 'kehadiran', icon: 'stats-chart-outline', label: 'KEHADIRAN RATA-RATA', value: '87.4%' },
-  ];
-
-  const seminarList: SeminarItem[] = [
-    {
-      id: '1',
-      title: 'Seminar Nasional Cyber Security 2024',
-      image:
-        'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80',
-      status: 'ACTIVE',
-      participantCount: '1,240 Peserta',
-      date: '24 Jul 2024',
-      avatars: [
-        'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80',
-        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&q=80',
-      ],
-      extraCount: '+99',
-      actionLabel: 'Kelola Sesi',
-      onAction: () => router.push('/admin/absensi'),
-    },
-    {
-      id: '2',
-      title: 'Workshop UI/UX Professional Design',
-      image:
-        'https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80',
-      status: 'UPCOMING',
-      participantCount: '85 Peserta',
-      date: '02 Agu 2024',
-      avatars: [
-        'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=80&q=80',
-        'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=80&q=80',
-      ],
-      extraCount: '+8',
-      actionLabel: 'Edit Draft',
-      onAction: () => router.push('/admin/seminar'),
-    },
+    { key: 'seminar', icon: 'document-text-outline', label: 'TOTAL SEMINAR', value: loadingStats ? '—' : String(totalSeminar) },
+    { key: 'peserta', icon: 'people-outline', label: 'TOTAL PESERTA', value: loadingStats ? '—' : String(totalPeserta) },
+    { key: 'sertifikat', icon: 'ribbon-outline', label: 'SERTIFIKAT TERBIT', value: loadingStats ? '—' : String(totalSertifikat) },
+    { key: 'kehadiran', icon: 'stats-chart-outline', label: 'KEHADIRAN RATA-RATA', value: loadingStats ? '—' : kehadiranRataRata },
   ];
 
   return (
@@ -139,6 +181,9 @@ export default function AdminDashboard() {
         style={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={loadingStats} onRefresh={loadStatsData} />
+        }
       >
         {/* Title Section */}
         <View style={styles.titleSection}>
@@ -159,6 +204,54 @@ export default function AdminDashboard() {
               <Text style={styles.statValue}>{stat.value}</Text>
             </View>
           ))}
+        </View>
+
+        {/* Quick Actions */}
+        <Text style={styles.sectionHeaderTitle}>Menu Cepat</Text>
+        <View style={styles.quickActionsGrid}>
+          <TouchableOpacity
+            style={styles.quickActionCard}
+            onPress={() => router.push('/admin/pendaftaran')}
+          >
+            <View style={[styles.quickActionIcon, { backgroundColor: '#EEF4FF' }]}>
+              <Ionicons name="person-add-outline" size={22} color="#3B82F6" />
+            </View>
+            <Text style={styles.quickActionLabel}>Pendaftaran</Text>
+            <Text style={styles.quickActionDesc}>Kelola & acc peserta</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.quickActionCard}
+            onPress={() => router.push('/admin/generate_sertifikat')}
+          >
+            <View style={[styles.quickActionIcon, { backgroundColor: '#FEF9EC' }]}>
+              <Ionicons name="ribbon-outline" size={22} color={DesignColors.gold} />
+            </View>
+            <Text style={styles.quickActionLabel}>Sertifikat</Text>
+            <Text style={styles.quickActionDesc}>Generate & terbitkan</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.quickActionCard}
+            onPress={() => router.push('/admin/absensi')}
+          >
+            <View style={[styles.quickActionIcon, { backgroundColor: '#EDFDF5' }]}>
+              <Ionicons name="checkmark-circle-outline" size={22} color={DesignColors.statusGreen} />
+            </View>
+            <Text style={styles.quickActionLabel}>Absensi</Text>
+            <Text style={styles.quickActionDesc}>Kelola kehadiran</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.quickActionCard}
+            onPress={() => router.push('/admin/laporan')}
+          >
+            <View style={[styles.quickActionIcon, { backgroundColor: '#FEF2F2' }]}>
+              <Ionicons name="bar-chart-outline" size={22} color={DesignColors.statusRed} />
+            </View>
+            <Text style={styles.quickActionLabel}>Laporan</Text>
+            <Text style={styles.quickActionDesc}>Statistik & data</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Seminar Berjalan Section */}
@@ -216,9 +309,11 @@ export default function AdminDashboard() {
                       ]}
                     />
                   ))}
-                  <View style={[styles.avatarIndicator, { marginLeft: -12, zIndex: 1 }]}>
-                    <Text style={styles.indicatorText}>{seminar.extraCount}</Text>
-                  </View>
+                  {!!seminar.extraCount && (
+                    <View style={[styles.avatarIndicator, { marginLeft: -12, zIndex: 1 }]}>
+                      <Text style={styles.indicatorText}>{seminar.extraCount}</Text>
+                    </View>
+                  )}
                 </View>
 
                 <TouchableOpacity onPress={seminar.onAction}>
@@ -231,27 +326,7 @@ export default function AdminDashboard() {
       </ScrollView>
 
       {/* Bottom Navigation Bar */}
-      <View style={styles.bottomTabBar}>
-        <TouchableOpacity style={styles.tabItem}>
-          <Ionicons name="home" size={22} color={DesignColors.gold} />
-          <Text style={[styles.tabLabel, { color: DesignColors.gold }]}>Beranda</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItem} onPress={() => router.push('/admin/generate_sertifikat')}>
-          <Ionicons name="ribbon-outline" size={22} color={DesignColors.goldSoft} />
-          <Text style={styles.tabLabel}>Sertifikat</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItem} onPress={() => router.push('/admin/seminar')}>
-          <Ionicons name="calendar-outline" size={22} color={DesignColors.goldSoft} />
-          <Text style={styles.tabLabel}>Seminar</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItem} onPress={() => router.push('/admin/profil')}>
-          <Ionicons name="person-outline" size={22} color={DesignColors.goldSoft} />
-          <Text style={styles.tabLabel}>Profil</Text>
-        </TouchableOpacity>
-      </View>
+      <AdminBottomNav />
     </View>
   );
 }
@@ -489,29 +564,36 @@ const styles = StyleSheet.create({
     color: DesignColors.gold,
     textDecorationLine: 'underline',
   },
-  bottomTabBar: {
+  quickActionsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: DesignColors.navyDeep,
-    height: 64,
-    borderTopWidth: 1,
-    borderTopColor: DesignColors.navySoft,
-    paddingBottom: Platform.OS === 'ios' ? 12 : 0,
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 24,
   },
-  tabItem: {
+  quickActionCard: {
+    width: '47%',
+    backgroundColor: DesignColors.ivoryCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+    padding: 16,
+  },
+  quickActionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
+    marginBottom: 10,
   },
-  tabLabel: {
-    fontSize: 9,
-    fontWeight: '600',
-    marginTop: 4,
-    color: DesignColors.goldSoft,
+  quickActionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: DesignColors.navyDeep,
+    marginBottom: 2,
+  },
+  quickActionDesc: {
+    fontSize: 10,
+    color: DesignColors.slateGray,
   },
 });

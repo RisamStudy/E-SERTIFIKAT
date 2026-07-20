@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PesertaScaffold } from '../../components/peserta/pesertachrome';
 import { EmptyState } from '../../components/ui/emptystate';
+import { auth, db } from '../../config/firebase';
 import { DesignColors, Radius } from '../../constants/theme';
 
 interface Sertifikat {
@@ -11,34 +13,75 @@ interface Sertifikat {
   seminarTitle: string;
   tanggalTerbit: string;
   idSertifikat: string;
+  imageUrl?: string;
+  verifyUrl?: string;
 }
-
-const data: Sertifikat[] = [
-  { id: '1', seminarTitle: 'Konferensi Rekayasa Perangkat Lunak', tanggalTerbit: '15 Mei 2024', idSertifikat: 'CE-2024-000188' },
-  { id: '2', seminarTitle: 'Pelatihan Dasar Data Science', tanggalTerbit: '03 Mar 2024', idSertifikat: 'CE-2024-000042' },
-];
 
 export default function PesertaSertifikatScreen() {
   const router = useRouter();
+  const [data, setData] = useState<Sertifikat[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadSertifikat();
+  }, []);
+
+  const loadSertifikat = async () => {
+    setLoading(true);
+    try {
+      const uid = auth.currentUser?.uid;
+      // Query sertifikat milik peserta ini
+      // Jika belum ada auth uid match, ambil semua untuk demo
+      const q = uid
+        ? query(collection(db, 'sertifikat'), where('pesertaId', '==', uid))
+        : query(collection(db, 'sertifikat'));
+
+      const snap = await getDocs(q);
+      const result: Sertifikat[] = snap.docs.map((d) => ({
+        id: d.id,
+        seminarTitle: (d.data() as { seminarTitle: string }).seminarTitle,
+        tanggalTerbit: (d.data() as { tanggalTerbit: string }).tanggalTerbit,
+        idSertifikat: (d.data() as { idSertifikat: string }).idSertifikat,
+        imageUrl: (d.data() as { imageUrl?: string }).imageUrl,
+        verifyUrl: (d.data() as { verifyUrl?: string }).verifyUrl,
+      }));
+      setData(result);
+    } catch {
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <PesertaScaffold title="Sertifikat Saya">
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.summaryCard}>
           <Ionicons name="ribbon" size={26} color={DesignColors.gold} />
-          <Text style={styles.summaryValue}>{data.length}</Text>
+          <Text style={styles.summaryValue}>{loading ? '-' : data.length}</Text>
           <Text style={styles.summaryLabel}>Sertifikat Diterima</Text>
         </View>
 
-        {data.length === 0 ? (
-          <EmptyState icon="ribbon-outline" title="Belum ada sertifikat" message="Ikuti dan selesaikan seminar untuk mendapatkan sertifikat digital." />
+        {loading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={DesignColors.gold} />
+            <Text style={styles.loadingText}>Memuat sertifikat...</Text>
+          </View>
+        ) : data.length === 0 ? (
+          <EmptyState
+            icon="ribbon-outline"
+            title="Belum ada sertifikat"
+            message="Ikuti dan selesaikan seminar untuk mendapatkan sertifikat digital."
+          />
         ) : (
           data.map((cert) => (
             <TouchableOpacity
               key={cert.id}
               style={styles.card}
               activeOpacity={0.85}
-              onPress={() => router.push({ pathname: '/peserta/download_sertifikat', params: { id: cert.id } })}
+              onPress={() =>
+                router.push({ pathname: '/peserta/download_sertifikat', params: { id: cert.id } })
+              }
             >
               <View style={styles.thumb}>
                 <View style={styles.thumbBorder}>
@@ -70,6 +113,8 @@ const styles = StyleSheet.create({
   },
   summaryValue: { fontSize: 26, fontWeight: '800', color: DesignColors.offWhite, marginTop: 8 },
   summaryLabel: { fontSize: 11, color: DesignColors.goldSoft, marginTop: 2 },
+  loadingWrap: { alignItems: 'center', paddingVertical: 40 },
+  loadingText: { marginTop: 12, fontSize: 12, color: DesignColors.slateGray },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -81,8 +126,23 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 12,
   },
-  thumb: { width: 52, height: 52, borderRadius: Radius.sm, backgroundColor: '#EDEAE2', alignItems: 'center', justifyContent: 'center' },
-  thumbBorder: { width: 40, height: 40, borderWidth: 1, borderColor: DesignColors.goldSoft, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  thumb: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.sm,
+    backgroundColor: '#EDEAE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbBorder: {
+    width: 40,
+    height: 40,
+    borderWidth: 1,
+    borderColor: DesignColors.goldSoft,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   cardInfo: { flex: 1 },
   title: { fontSize: 13, fontWeight: '700', color: DesignColors.navyDeep, lineHeight: 18 },
   meta: { fontSize: 11, color: DesignColors.slateGray, marginTop: 4 },

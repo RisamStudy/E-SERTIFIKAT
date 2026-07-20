@@ -1,27 +1,43 @@
-import React, { useState } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Platform,
-  Alert,
-  Modal,
-  TextInput,
-  KeyboardAvoidingView,
-} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import {
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    getDocs,
+    orderBy,
+    query,
+    updateDoc,
+} from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { AdminBottomNav } from '../../components/admin/adminchrome';
+import { uploadToCloudinary } from '../../config/cloudinary';
+import { db } from '../../config/firebase';
 
 interface Seminar {
   id: string;
   title: string;
   lecturer: string;
   date: string;
-  image: string;
+  image: string;          // URL banner (Cloudinary atau fallback Unsplash)
+  bannerPublicId?: string; // Cloudinary public_id untuk keperluan transformasi
   status: 'aktif' | 'draft' | 'selesai';
   participants?: string[];
   participantCount?: number;
@@ -31,13 +47,8 @@ interface Seminar {
 export default function AdminSeminarScreen() {
   const router = useRouter();
 
-  // Active filter state ('semua', 'aktif', 'draft', 'selesai')
   const [activeFilter, setActiveFilter] = useState<'semua' | 'aktif' | 'draft' | 'selesai'>('semua');
-  
-  // Active page state for pagination
   const [activePage, setActivePage] = useState<number>(1);
-
-  // Modal states for creating/editing seminar
   const [modalVisible, setModalVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -48,43 +59,62 @@ export default function AdminSeminarScreen() {
   const [formDate, setFormDate] = useState('');
   const [formStatus, setFormStatus] = useState<'aktif' | 'draft' | 'selesai'>('aktif');
   const [formStatusNote, setFormStatusNote] = useState('');
+  const [formBannerUri, setFormBannerUri] = useState<string | null>(null); // URI lokal sebelum upload
+  const [formBannerUrl, setFormBannerUrl] = useState<string>('');          // URL Cloudinary setelah upload
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [savingForm, setSavingForm] = useState(false);
+  const [loadingSeminar, setLoadingSeminar] = useState(true);
 
-  // Initial rich mock data matching the design image
-  const [seminarList, setSeminarList] = useState<Seminar[]>([
-    {
-      id: '1',
-      title: 'Implementasi AI dalam Riset Akademik Modern',
-      lecturer: 'Prof. Dr. Aninditya Putri',
-      date: '15 Oktober 2023, 09:00 WIB',
-      image: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80',
-      status: 'aktif',
-      participants: [
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
-        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&q=80',
-      ],
-      participantCount: 10, // Renders the +8 badge (10 total minus 2 avatars)
-    },
-    {
-      id: '2',
-      title: 'Strategi Publikasi Jurnal Q1 untuk Dosen Muda',
-      lecturer: 'Dr. Budi Santoso, M.Kom',
-      date: '22 November 2023, 13:00 WIB',
-      image: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=800&q=80',
-      status: 'draft',
-      statusNote: 'Menunggu persetujuan admin...',
-    },
-    {
-      id: '3',
-      title: 'Webinar Nasional: Ketahanan Digital Indonesia',
-      lecturer: 'Ir. H. Muhammad Zaki',
-      date: '05 September 2023, 10:00 WIB',
-      image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=800&q=80',
-      status: 'selesai',
-      statusNote: '542 Sertifikat Terbit',
-    },
-  ]);
+  const FALLBACK_IMAGES = {
+    aktif: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80',
+    draft: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=800&q=80',
+    selesai: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=800&q=80',
+  };
 
-  // Handle Edit Action
+  const [seminarList, setSeminarList] = useState<Seminar[]>([]);
+
+  // Load seminar dari Firestore
+  useEffect(() => {
+    loadSeminars();
+  }, []);
+
+  const loadSeminars = async () => {
+    setLoadingSeminar(true);
+    try {
+      const q = query(collection(db, 'seminar'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      const data: Seminar[] = snap.docs.map(d => ({
+        id: d.id,
+        ...(d.data() as Omit<Seminar, 'id'>),
+      }));
+      setSeminarList(data);
+    } catch {
+      // Jika koleksi belum ada atau error, mulai dengan list kosong
+      setSeminarList([]);
+    } finally {
+      setLoadingSeminar(false);
+    }
+  };
+
+  // Pilih banner dari galeri
+  const handlePickBanner = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Izin Diperlukan', 'Izinkan akses ke galeri untuk memilih banner seminar.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.85,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setFormBannerUri(result.assets[0].uri);
+    }
+  };
+
+  // Handle Edit
   const handleEdit = (seminar: Seminar) => {
     setIsEditing(true);
     setEditingId(seminar.id);
@@ -93,10 +123,12 @@ export default function AdminSeminarScreen() {
     setFormDate(seminar.date);
     setFormStatus(seminar.status);
     setFormStatusNote(seminar.statusNote || '');
+    setFormBannerUri(null);
+    setFormBannerUrl(seminar.image);
     setModalVisible(true);
   };
 
-  // Handle Delete Action
+  // Handle Delete
   const handleDelete = (id: string, title: string) => {
     Alert.alert(
       'Hapus Seminar',
@@ -106,82 +138,106 @@ export default function AdminSeminarScreen() {
         {
           text: 'Hapus',
           style: 'destructive',
-          onPress: () => {
-            setSeminarList(prev => prev.filter(item => item.id !== id));
-            Alert.alert('Sukses', 'Seminar berhasil dihapus.');
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'seminar', id));
+              setSeminarList(prev => prev.filter(item => item.id !== id));
+              Alert.alert('Sukses', 'Seminar berhasil dihapus.');
+            } catch {
+              Alert.alert('Error', 'Gagal menghapus seminar. Coba lagi.');
+            }
           },
         },
       ]
     );
   };
 
-  // Save/Add Seminar
-  const handleSave = () => {
+  // Save / Update seminar — upload banner ke Cloudinary jika ada
+  const handleSave = async () => {
     if (!formTitle || !formLecturer || !formDate) {
       Alert.alert('Error', 'Harap isi seluruh field.');
       return;
     }
+    setSavingForm(true);
 
-    if (isEditing && editingId) {
-      // Update existing
-      setSeminarList(prev =>
-        prev.map(item =>
-          item.id === editingId
-            ? {
-                ...item,
-                title: formTitle,
-                lecturer: formLecturer,
-                date: formDate,
-                status: formStatus,
-                statusNote:
-                  formStatus === 'draft'
-                    ? formStatusNote || 'Menunggu persetujuan admin...'
-                    : formStatus === 'selesai'
-                    ? formStatusNote || '500 Sertifikat Terbit'
-                    : undefined,
-              }
-            : item
-        )
-      );
-      Alert.alert('Sukses', 'Seminar berhasil diperbarui.');
-    } else {
-      // Add new
-      let defaultImg = 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80';
-      if (formStatus === 'draft') {
-        defaultImg = 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=800&q=80';
-      } else if (formStatus === 'selesai') {
-        defaultImg = 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=800&q=80';
+    try {
+      let finalBannerUrl = formBannerUrl || FALLBACK_IMAGES[formStatus];
+      let displayBannerUrl = finalBannerUrl; // URL yang ditampilkan di UI (bisa lokal)
+      let bannerPublicId: string | undefined;
+
+      // Upload banner baru ke Cloudinary jika user memilih file
+      if (formBannerUri) {
+        setUploadingBanner(true);
+        try {
+          const uploaded = await uploadToCloudinary(formBannerUri, 'seminars/banner');
+          finalBannerUrl = uploaded.secure_url;
+          displayBannerUrl = uploaded.secure_url;
+          bannerPublicId = uploaded.public_id;
+        } catch (err) {
+          // Cloudinary belum dikonfigurasi atau upload gagal:
+          // tampilkan URI lokal di UI, simpan fallback ke Firestore
+          displayBannerUrl = formBannerUri;
+          finalBannerUrl = FALLBACK_IMAGES[formStatus];
+          Alert.alert(
+            'Info Banner',
+            'Upload ke cloud belum aktif (konfigurasi Cloudinary belum diisi). Seminar disimpan dengan gambar default. Isi config/cloudinary.ts untuk mengaktifkan upload.'
+          );
+        } finally {
+          setUploadingBanner(false);
+        }
       }
 
-      const newSeminar: Seminar = {
-        id: (seminarList.length + 1).toString(),
-        title: formTitle,
-        lecturer: formLecturer,
-        date: formDate,
-        image: defaultImg,
-        status: formStatus,
-        statusNote:
-          formStatus === 'draft'
-            ? formStatusNote || 'Menunggu persetujuan admin...'
-            : formStatus === 'selesai'
-            ? formStatusNote || '0 Sertifikat Terbit'
-            : undefined,
-        participants:
-          formStatus === 'aktif'
-            ? [
-                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
-                'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&q=80',
-              ]
-            : undefined,
-        participantCount: formStatus === 'aktif' ? 10 : undefined,
-      };
+      const statusNote =
+        formStatus === 'draft'
+          ? formStatusNote || 'Menunggu persetujuan admin...'
+          : formStatus === 'selesai'
+          ? formStatusNote || '0 Sertifikat Terbit'
+          : undefined;
 
-      setSeminarList(prev => [...prev, newSeminar]);
-      Alert.alert('Sukses', 'Seminar baru berhasil ditambahkan.');
+      if (isEditing && editingId) {
+        const updateData: Record<string, unknown> = {
+          title: formTitle,
+          lecturer: formLecturer,
+          date: formDate,
+          status: formStatus,
+          image: finalBannerUrl,
+          updatedAt: new Date().toISOString(),
+        };
+        if (statusNote !== undefined) updateData.statusNote = statusNote;
+        if (bannerPublicId) updateData.bannerPublicId = bannerPublicId;
+
+        await updateDoc(doc(db, 'seminar', editingId), updateData);
+        setSeminarList(prev =>
+          prev.map(item =>
+            item.id === editingId
+              ? { ...item, title: formTitle, lecturer: formLecturer, date: formDate, status: formStatus, image: finalBannerUrl, statusNote }
+              : item
+          )
+        );
+        Alert.alert('Sukses', 'Seminar berhasil diperbarui.');
+      } else {
+        const newData = {
+          title: formTitle,
+          lecturer: formLecturer,
+          date: formDate,
+          image: finalBannerUrl,
+          bannerPublicId: bannerPublicId ?? null,
+          status: formStatus,
+          statusNote: statusNote ?? null,
+          participants: formStatus === 'aktif' ? [] : null,
+          participantCount: formStatus === 'aktif' ? 0 : null,
+          createdAt: new Date().toISOString(),
+        };
+        const ref = await addDoc(collection(db, 'seminar'), newData);
+        setSeminarList(prev => [{ id: ref.id, ...newData } as Seminar, ...prev]);
+        Alert.alert('Sukses', 'Seminar baru berhasil ditambahkan.');
+      }
+      resetForm();
+    } catch (err) {
+      Alert.alert('Error', 'Gagal menyimpan seminar. Periksa koneksi internet dan coba lagi.');
+    } finally {
+      setSavingForm(false);
     }
-
-    // Reset and close modal
-    resetForm();
   };
 
   const resetForm = () => {
@@ -190,11 +246,12 @@ export default function AdminSeminarScreen() {
     setFormDate('');
     setFormStatus('aktif');
     setFormStatusNote('');
+    setFormBannerUri(null);
+    setFormBannerUrl('');
     setIsEditing(false);
     setEditingId(null);
     setModalVisible(false);
   };
-
   // Filter seminar list based on pills
   const filteredList = seminarList.filter(item => {
     if (activeFilter === 'semua') return true;
@@ -219,6 +276,14 @@ export default function AdminSeminarScreen() {
           </View>
         </View>
       </View>
+
+      {/* Loading state */}
+      {loadingSeminar && (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#C9A24B" />
+          <Text style={styles.loadingText}>Memuat seminar...</Text>
+        </View>
+      )}
 
       {/* Main Content Scroll View */}
       <ScrollView
@@ -470,36 +535,7 @@ export default function AdminSeminarScreen() {
       </TouchableOpacity>
 
       {/* 7. Bottom Navigation Bar */}
-      <View style={styles.bottomTabBar}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => router.replace('/admin/dashboard')}
-        >
-          <Ionicons name="home-outline" size={22} color="#5C6470" />
-          <Text style={[styles.tabLabel, { color: '#5C6470' }]}>Beranda</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tabItem}>
-          <Ionicons name="calendar" size={22} color="#C9A24B" />
-          <Text style={[styles.tabLabel, { color: '#C9A24B' }]}>Seminar</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => router.push('/admin/generate_sertifikat')}
-        >
-          <Ionicons name="ribbon-outline" size={22} color="#5C6470" />
-          <Text style={[styles.tabLabel, { color: '#5C6470' }]}>Sertifikat</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => router.push('/admin/profil')}
-        >
-          <Ionicons name="person-outline" size={22} color="#5C6470" />
-          <Text style={[styles.tabLabel, { color: '#5C6470' }]}>Profil</Text>
-        </TouchableOpacity>
-      </View>
+      <AdminBottomNav />
 
       {/* 8. Create/Edit Seminar Modal Dialog */}
       <Modal
@@ -603,14 +639,54 @@ export default function AdminSeminarScreen() {
                 </View>
               )}
 
+              {/* Field: Banner Seminar */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Banner Seminar</Text>
+                <TouchableOpacity style={styles.bannerPickerBtn} onPress={handlePickBanner}>
+                  {formBannerUri ? (
+                    <Image source={{ uri: formBannerUri }} style={styles.bannerPreview} resizeMode="cover" />
+                  ) : formBannerUrl ? (
+                    <Image source={{ uri: formBannerUrl }} style={styles.bannerPreview} resizeMode="cover" />
+                  ) : (
+                    <View style={styles.bannerPickerPlaceholder}>
+                      <Ionicons name="image-outline" size={28} color="#8A8F98" />
+                      <Text style={styles.bannerPickerText}>Ketuk untuk pilih banner (16:9)</Text>
+                      <Text style={styles.bannerPickerHint}>Jika kosong, gambar default akan digunakan</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                {(formBannerUri || formBannerUrl) && (
+                  <TouchableOpacity
+                    style={styles.bannerRemoveBtn}
+                    onPress={() => { setFormBannerUri(null); setFormBannerUrl(''); }}
+                  >
+                    <Ionicons name="trash-outline" size={14} color="#B3413A" />
+                    <Text style={styles.bannerRemoveText}>Hapus Banner</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               {/* Submit Buttons */}
-              <TouchableOpacity style={styles.submitBtn} onPress={handleSave}>
-                <Text style={styles.submitBtnText}>
-                  {isEditing ? 'Simpan Perubahan' : 'Buat Seminar'}
-                </Text>
+              <TouchableOpacity
+                style={[styles.submitBtn, (savingForm || uploadingBanner) && { opacity: 0.7 }]}
+                onPress={handleSave}
+                disabled={savingForm || uploadingBanner}
+              >
+                {(savingForm || uploadingBanner) ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <Text style={styles.submitBtnText}>
+                      {uploadingBanner ? 'Mengupload Banner...' : 'Menyimpan...'}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.submitBtnText}>
+                    {isEditing ? 'Simpan Perubahan' : 'Buat Seminar'}
+                  </Text>
+                )}
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.cancelBtn} onPress={resetForm}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={resetForm} disabled={savingForm}>
                 <Text style={styles.cancelBtnText}>Batal</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -962,30 +1038,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
   },
-  bottomTabBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: '#0F1B2D',
-    height: 64,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)',
-    paddingBottom: Platform.OS === 'ios' ? 12 : 0,
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  tabLabel: {
-    fontSize: 9,
-    fontWeight: '600',
-    marginTop: 4,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1075,5 +1127,57 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#8A8F98',
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 13,
+    color: '#5C6470',
+  },
+  bannerPickerBtn: {
+    borderWidth: 1.5,
+    borderColor: '#DCD7CB',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    overflow: 'hidden',
+    minHeight: 110,
+  },
+  bannerPreview: {
+    width: '100%',
+    height: 160,
+  },
+  bannerPickerPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    gap: 6,
+  },
+  bannerPickerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#5C6470',
+    textAlign: 'center',
+  },
+  bannerPickerHint: {
+    fontSize: 10,
+    color: '#8A8F98',
+    textAlign: 'center',
+  },
+  bannerRemoveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    alignSelf: 'flex-end',
+  },
+  bannerRemoveText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#B3413A',
   },
 });

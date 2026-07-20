@@ -19,6 +19,7 @@ export default function RootLayout() {
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
         <Stack.Screen name="lupa_password" />
+        <Stack.Screen name="verify/[id]" />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
