@@ -270,7 +270,7 @@ export default function PesertaDashboard() {
             <View style={styles.certInner}>
               <View style={styles.certLogoRow}>
                 <Ionicons name="ribbon" size={18} color={DesignColors.gold} />
-                <Text style={styles.certKicker}>CERTIFYELITE</Text>
+                <Text style={styles.certKicker}>E-SERTIFIKAT</Text>
               </View>
               <Text style={styles.certHeading}>SERTIFIKAT</Text>
               <Text style={styles.certGiven}>Diberikan kepada</Text>

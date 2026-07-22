@@ -111,7 +111,7 @@ export default function AdminPengaturanScreen() {
               <Ionicons name="information-circle-outline" size={18} color={DesignColors.navyDeep} />
             </View>
             <View style={styles.rowTextWrap}>
-              <Text style={styles.rowLabel}>CertifyElite</Text>
+              <Text style={styles.rowLabel}>E-Sertifikat</Text>
               <Text style={styles.rowDescription}>Versi 1.0.0 • Build Akademik</Text>
             </View>
           </View>

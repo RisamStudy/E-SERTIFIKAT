@@ -52,7 +52,7 @@ export default function SplashScreen() {
         </Animated.View>
 
         {/* Brand texts */}
-        <Text style={[styles.brandName, { color: textTheme }]}>CertifyElite</Text>
+        <Text style={[styles.brandName, { color: textTheme }]}>E-Sertifikat</Text>
         <Text style={[styles.subtitle, { color: subtitleTheme }]}>
           ACADEMIC EXCELLENCE &{'\n'}RECOGNITION
         </Text>

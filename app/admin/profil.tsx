@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { signOut } from 'firebase/auth';
-import React, { useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { signOut, updateProfile } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { AdminScaffold } from '../../components/admin/adminchrome';
-import { auth } from '../../config/firebase';
+import { auth, db } from '../../config/firebase';
 import { DesignColors, Radius } from '../../constants/theme';
 
 interface MenuItem {
@@ -22,7 +23,28 @@ export default function AdminProfilScreen() {
 
   const adminUser = auth.currentUser;
   const displayName = adminUser?.displayName || 'Administrator';
-  const email = adminUser?.email || 'admin@certifyelite.id';
+  const email = adminUser?.email || 'admin@e-sertifikat.id';
+  const [accountName, setAccountName] = useState(displayName);
+  const [savingName, setSavingName] = useState(false);
+
+  useEffect(() => {
+    const loadAccountName = async () => {
+      const uid = adminUser?.uid;
+      if (!uid) return;
+      try {
+        const userSnap = await getDoc(doc(db, 'users', uid));
+        if (userSnap.exists()) {
+          const userData = userSnap.data() as { displayName?: string; name?: string; nama?: string };
+          const savedName = userData.displayName || userData.name || userData.nama;
+          if (savedName) setAccountName(savedName);
+        }
+      } catch (error) {
+        console.error('Gagal memuat nama admin:', error);
+      }
+    };
+
+    loadAccountName();
+  }, [adminUser?.uid]);
 
   const handleLogout = () => {
     Alert.alert('Konfirmasi Keluar', 'Apakah Anda yakin ingin keluar dari akun admin?', [
@@ -43,6 +65,39 @@ export default function AdminProfilScreen() {
         },
       },
     ]);
+  };
+
+  const handleSaveName = async () => {
+    const uid = adminUser?.uid;
+    const nextName = accountName.trim();
+    if (!uid || !adminUser) {
+      Alert.alert('Sesi Berakhir', 'Silakan masuk kembali untuk mengubah nama akun.');
+      return;
+    }
+    if (!nextName) {
+      Alert.alert('Nama Wajib Diisi', 'Nama akun tidak boleh kosong.');
+      return;
+    }
+
+    setSavingName(true);
+    try {
+      await updateProfile(adminUser, { displayName: nextName });
+      await setDoc(doc(db, 'users', uid), {
+        uid,
+        name: nextName,
+        displayName: nextName,
+        email: adminUser.email ?? '',
+        role: 'admin',
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      setAccountName(nextName);
+      Alert.alert('Tersimpan', 'Nama akun admin berhasil diperbarui.');
+    } catch (error) {
+      console.error('Gagal menyimpan nama admin:', error);
+      Alert.alert('Error', 'Gagal menyimpan nama akun.');
+    } finally {
+      setSavingName(false);
+    }
   };
 
   const menuItems: MenuItem[] = [
@@ -72,7 +127,7 @@ export default function AdminProfilScreen() {
       icon: 'help-circle-outline',
       label: 'Pusat Bantuan',
       description: 'FAQ & hubungi tim support',
-      onPress: () => Alert.alert('Bantuan', 'Hubungi support@certifyelite.id untuk bantuan lebih lanjut.'),
+      onPress: () => Alert.alert('Bantuan', 'Hubungi support@e-sertifikat.id untuk bantuan lebih lanjut.'),
     },
     {
       key: 'keluar',
@@ -95,12 +150,35 @@ export default function AdminProfilScreen() {
               style={styles.avatar}
             />
           </View>
-          <Text style={styles.name}>{displayName}</Text>
+          <Text style={styles.name}>{accountName || displayName}</Text>
           <Text style={styles.email}>{email}</Text>
           <View style={styles.roleBadge}>
             <Ionicons name="shield-checkmark-outline" size={12} color={DesignColors.navyDeep} />
             <Text style={styles.roleText}>Administrator</Text>
           </View>
+        </View>
+
+        <View style={styles.editNameCard}>
+          <View style={styles.editNameHeader}>
+            <Ionicons name="person-outline" size={18} color={DesignColors.navyDeep} />
+            <Text style={styles.editNameTitle}>Nama Akun</Text>
+          </View>
+          <TextInput
+            style={styles.nameInput}
+            value={accountName}
+            onChangeText={setAccountName}
+            placeholder="Masukkan nama admin"
+            placeholderTextColor={DesignColors.slateGray}
+            autoCapitalize="words"
+          />
+          <TouchableOpacity
+            style={[styles.saveNameButton, savingName && { opacity: 0.7 }]}
+            onPress={handleSaveName}
+            disabled={savingName}
+          >
+            <Ionicons name="save-outline" size={16} color={DesignColors.navyDeep} />
+            <Text style={styles.saveNameText}>{savingName ? 'Menyimpan...' : 'Simpan Nama'}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Quick Stats */}
@@ -153,7 +231,7 @@ export default function AdminProfilScreen() {
           ))}
         </View>
 
-        <Text style={styles.versionText}>CertifyElite Admin • v1.0.0</Text>
+        <Text style={styles.versionText}>E-Sertifikat Admin • v1.0.0</Text>
       </ScrollView>
     </AdminScaffold>
   );
@@ -191,6 +269,37 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
   },
   roleText: { fontSize: 11, fontWeight: '700', color: DesignColors.navyDeep },
+  editNameCard: {
+    backgroundColor: DesignColors.ivoryCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+    padding: 16,
+    marginBottom: 16,
+  },
+  editNameHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  editNameTitle: { fontSize: 14, fontWeight: '700', color: DesignColors.navyDeep },
+  nameInput: {
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+    borderRadius: Radius.md,
+    backgroundColor: DesignColors.offWhite,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    fontSize: 14,
+    color: DesignColors.navyDeep,
+  },
+  saveNameButton: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: DesignColors.gold,
+    borderRadius: Radius.md,
+    paddingVertical: 12,
+  },
+  saveNameText: { fontSize: 13, fontWeight: '700', color: DesignColors.navyDeep },
   quickStatsRow: {
     flexDirection: 'row',
     backgroundColor: DesignColors.ivoryCard,

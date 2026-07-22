@@ -20,12 +20,32 @@ import { DesignColors, Radius } from '../../constants/theme';
 
 const TEMPLATE_DOC_ID = 'default'; // Firestore: collection 'template_sertifikat' / doc 'default'
 
+interface Signatory {
+  nama: string;
+  jabatan: string;
+  keyTtd: string;
+}
+
 interface TemplateData {
   judulAcara: string;
   namaPenandatangan: string;
   jabatan: string;
   showQr: boolean;
+  signatories?: Signatory[];
 }
+
+const getTtdSource = (key: string) => {
+  switch (key) {
+    case 'tanda_tangan.png':
+      return require('../../assets/tanda_tangan.png');
+    case 'tanda_tangan2.png':
+      return require('../../assets/tanda_tangan2.png');
+    case 'tanda_tangan3.png':
+      return require('../../assets/tanda_tangan3.png');
+    default:
+      return require('../../assets/tanda_tangan.png');
+  }
+};
 
 export default function AdminTemplateSertifikatScreen() {
   const router = useRouter();
@@ -36,6 +56,12 @@ export default function AdminTemplateSertifikatScreen() {
   const [showQr, setShowQr] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const [signatories, setSignatories] = useState<Signatory[]>([
+    { nama: "Muhamad Risa Ma'arif", jabatan: 'Ketua pelaksana', keyTtd: 'tanda_tangan.png' },
+    { nama: 'Ahmad Abdullah Firdaus', jabatan: 'Wakil Ketua Pelaksana', keyTtd: 'tanda_tangan2.png' },
+    { nama: 'Reinal Fahrizi', jabatan: 'Sekretaris Acara', keyTtd: 'tanda_tangan3.png' },
+  ]);
 
   // Load template dari Firestore
   useEffect(() => {
@@ -48,6 +74,9 @@ export default function AdminTemplateSertifikatScreen() {
           setNamaPenandatangan(data.namaPenandatangan ?? '');
           setJabatan(data.jabatan ?? '');
           setShowQr(data.showQr ?? true);
+          if (data.signatories && Array.isArray(data.signatories) && data.signatories.length > 0) {
+            setSignatories(data.signatories);
+          }
         }
       } catch (err) {
         console.error('load template error:', err);
@@ -57,21 +86,34 @@ export default function AdminTemplateSertifikatScreen() {
     })();
   }, []);
 
+  const updateSignatory = (index: number, field: keyof Signatory, value: string) => {
+    setSignatories(prev => {
+      const next = [...prev];
+      if (!next[index]) {
+        next[index] = { nama: '', jabatan: '', keyTtd: `tanda_tangan${index > 0 ? index + 1 : ''}.png` };
+      }
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
   const handleSave = async () => {
-    if (!judulAcara.trim() || !namaPenandatangan.trim() || !jabatan.trim()) {
-      Alert.alert('Lengkapi Data', 'Judul acara, nama penandatangan, dan jabatan wajib diisi.');
+    const activeSignatories = signatories.filter(s => s.nama.trim() !== '');
+    if (!judulAcara.trim() || activeSignatories.length === 0 || !activeSignatories[0].nama.trim() || !activeSignatories[0].jabatan.trim()) {
+      Alert.alert('Lengkapi Data', 'Judul acara dan Penandatangan 1 wajib diisi.');
       return;
     }
     setSaving(true);
     try {
       await setDoc(doc(db, 'template_sertifikat', TEMPLATE_DOC_ID), {
         judulAcara: judulAcara.trim(),
-        namaPenandatangan: namaPenandatangan.trim(),
-        jabatan: jabatan.trim(),
+        namaPenandatangan: activeSignatories[0].nama.trim(),
+        jabatan: activeSignatories[0].jabatan.trim(),
         showQr,
+        signatories: activeSignatories,
         updatedAt: new Date().toISOString(),
       });
-      Alert.alert('Tersimpan', 'Template sertifikat berhasil diperbarui dan siap digunakan saat generate sertifikat.');
+      Alert.alert('Tersimpan', 'Template sertifikat berhasil diperbarui.');
     } catch (err) {
       console.error('save template error:', err);
       Alert.alert('Gagal', 'Gagal menyimpan template. Coba lagi.');
@@ -106,7 +148,7 @@ export default function AdminTemplateSertifikatScreen() {
             <View style={styles.certLogoCircle}>
               <Ionicons name="ribbon" size={22} color={DesignColors.gold} />
             </View>
-            <Text style={styles.certKicker}>CERTIFYELITE ACADEMIC PORTAL</Text>
+            <Text style={styles.certKicker}>E-SERTIFIKAT ACADEMIC PORTAL</Text>
             <Text style={styles.certTitle}>SERTIFIKAT</Text>
             <Text style={styles.certGiven}>Dengan bangga diberikan kepada</Text>
             <Text style={styles.certName}>Nama Peserta</Text>
@@ -115,17 +157,19 @@ export default function AdminTemplateSertifikatScreen() {
               <Text style={styles.certBodyBold}>{judulAcara || 'Judul Acara'}</Text>
             </Text>
 
-            <View style={styles.certFooterRow}>
-              <View style={styles.certSignBlock}>
-                <Image
-                  source={require('../../assets/tanda_tangan.png')}
-                  style={styles.signatureImg}
-                  resizeMode="contain"
-                />
-                <View style={styles.certSignLine} />
-                <Text style={styles.certSignName}>{namaPenandatangan || 'Nama Penandatangan'}</Text>
-                <Text style={styles.certSignRole}>{jabatan || 'Jabatan'}</Text>
-              </View>
+             <View style={styles.certFooterRow}>
+              {signatories.filter(s => s.nama.trim() !== '').map((sig, idx) => (
+                <View key={idx} style={styles.certSignBlock}>
+                  <Image
+                    source={getTtdSource(sig.keyTtd)}
+                    style={styles.signatureImg}
+                    resizeMode="contain"
+                  />
+                  <View style={styles.certSignLine} />
+                  <Text style={styles.certSignName}>{sig.nama}</Text>
+                  <Text style={styles.certSignRole}>{sig.jabatan}</Text>
+                </View>
+              ))}
               <Image
                 source={require('../../assets/stempel.png')}
                 style={styles.stempelImg}
@@ -158,25 +202,64 @@ export default function AdminTemplateSertifikatScreen() {
             placeholder="Nama seminar/workshop"
             placeholderTextColor={DesignColors.slateGray}
           />
-
-          <Text style={styles.formLabel}>Nama Penandatangan *</Text>
-          <TextInput
-            style={styles.formInput}
-            value={namaPenandatangan}
-            onChangeText={setNamaPenandatangan}
-            placeholder="Nama lengkap & gelar"
-            placeholderTextColor={DesignColors.slateGray}
-          />
-
-          <Text style={styles.formLabel}>Jabatan Penandatangan *</Text>
-          <TextInput
-            style={styles.formInput}
-            value={jabatan}
-            onChangeText={setJabatan}
-            placeholder="Contoh: Ketua Panitia"
-            placeholderTextColor={DesignColors.slateGray}
-          />
         </View>
+
+        <Text style={styles.groupTitle}>Penandatangan (Maksimal 3)</Text>
+        {[0, 1, 2].map(idx => {
+          const sig = signatories[idx] || { nama: '', jabatan: '', keyTtd: `tanda_tangan${idx > 0 ? idx + 1 : ''}.png` };
+          return (
+            <View key={idx} style={[styles.card, { marginBottom: 16 }]}>
+              <Text style={{ fontWeight: '700', color: DesignColors.navyDeep, marginBottom: 8 }}>
+                Penandatangan {idx + 1} {idx === 0 ? '*' : '(Opsional)'}
+              </Text>
+              
+              <Text style={styles.formLabel}>Nama Lengkap</Text>
+              <TextInput
+                style={styles.formInput}
+                value={sig.nama}
+                onChangeText={(val) => updateSignatory(idx, 'nama', val)}
+                placeholder="Nama lengkap & gelar"
+                placeholderTextColor={DesignColors.slateGray}
+              />
+
+              <Text style={styles.formLabel}>Jabatan</Text>
+              <TextInput
+                style={styles.formInput}
+                value={sig.jabatan}
+                onChangeText={(val) => updateSignatory(idx, 'jabatan', val)}
+                placeholder="Contoh: Ketua Pelaksana"
+                placeholderTextColor={DesignColors.slateGray}
+              />
+
+              <Text style={styles.formLabel}>File Tanda Tangan</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                {['tanda_tangan.png', 'tanda_tangan2.png', 'tanda_tangan3.png'].map(key => (
+                  <TouchableOpacity
+                    key={key}
+                    style={{
+                      flex: 1,
+                      padding: 8,
+                      borderRadius: Radius.sm,
+                      borderWidth: 1.5,
+                      borderColor: sig.keyTtd === key ? DesignColors.gold : DesignColors.borderLight,
+                      backgroundColor: sig.keyTtd === key ? DesignColors.offWhite : '#fff',
+                      alignItems: 'center'
+                    }}
+                    onPress={() => updateSignatory(idx, 'keyTtd', key)}
+                  >
+                    <Text style={{
+                      fontSize: 10,
+                      fontWeight: sig.keyTtd === key ? '700' : '400',
+                      color: sig.keyTtd === key ? DesignColors.navyDeep : DesignColors.slateGray
+                    }}>
+                      {key.replace('.png', '')}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          );
+        })}
 
         <Text style={styles.groupTitle}>Aset Visual</Text>
         <View style={styles.card}>
@@ -262,7 +345,7 @@ const styles = StyleSheet.create({
   certOverlay: {
     padding: 20,
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    backgroundColor: 'transparent',
   },
   certLogoCircle: {
     width: 40,
@@ -283,18 +366,27 @@ const styles = StyleSheet.create({
   certBodyBold: { fontWeight: '700', color: DesignColors.navyDeep },
   certFooterRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'flex-end',
     width: '100%',
     marginTop: 20,
     paddingHorizontal: 8,
+    position: 'relative',
+    gap: 8,
   },
-  certSignBlock: { alignItems: 'center', flex: 1 },
-  signatureImg: { width: 70, height: 28, marginBottom: -4 },
-  certSignLine: { width: 90, height: 1, backgroundColor: DesignColors.slateGray, marginBottom: 4 },
-  certSignName: { fontSize: 8, fontWeight: '700', color: DesignColors.navyDeep, textAlign: 'center' },
-  certSignRole: { fontSize: 7, color: DesignColors.slateGray, marginTop: 1, textAlign: 'center' },
-  stempelImg: { width: 52, height: 52 },
+  certSignBlock: { alignItems: 'center', flex: 1, minWidth: 60 },
+  signatureImg: { width: 60, height: 24, marginBottom: -4 },
+  certSignLine: { width: 75, height: 1, backgroundColor: DesignColors.slateGray, marginBottom: 4 },
+  certSignName: { fontSize: 7, fontWeight: '700', color: DesignColors.navyDeep, textAlign: 'center' },
+  certSignRole: { fontSize: 6, color: DesignColors.slateGray, marginTop: 1, textAlign: 'center' },
+  stempelImg: {
+    position: 'absolute',
+    right: 0,
+    bottom: -5,
+    width: 48,
+    height: 48,
+    opacity: 0.8,
+  },
   certQrRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
   certIdText: { fontSize: 8, color: DesignColors.slateGray },
   groupTitle: {

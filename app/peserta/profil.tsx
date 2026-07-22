@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { signOut } from 'firebase/auth';
-import React, { useEffect, useState } from 'react';
-import { Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { signOut, updateProfile } from 'firebase/auth';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { PesertaScaffold } from '../../components/peserta/pesertachrome';
 import { auth, db } from '../../config/firebase';
 import { DesignColors, Radius } from '../../constants/theme';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 
 interface MenuItem {
   key: string;
@@ -23,18 +23,16 @@ export default function PesertaProfilScreen() {
 
   const user = auth.currentUser;
   const displayName = user?.displayName || 'Peserta';
-  const email = user?.email || 'peserta@certifyelite.id';
+  const email = user?.email || 'peserta@e-sertifikat.id';
 
   const [jumlahSeminar, setJumlahSeminar] = useState(0);
   const [jumlahSertifikat, setJumlahSertifikat] = useState(0);
   const [persenKehadiran, setPersenKehadiran] = useState('0%');
   const [loadingStats, setLoadingStats] = useState(true);
+  const [accountName, setAccountName] = useState(displayName);
+  const [savingName, setSavingName] = useState(false);
 
-  useEffect(() => {
-    loadProfileStats();
-  }, [user?.uid]);
-
-  const loadProfileStats = async () => {
+  const loadProfileStats = useCallback(async () => {
     const uid = user?.uid;
     if (!uid) {
       setLoadingStats(false);
@@ -42,6 +40,13 @@ export default function PesertaProfilScreen() {
     }
     setLoadingStats(true);
     try {
+      const userSnap = await getDoc(doc(db, 'users', uid));
+      if (userSnap.exists()) {
+        const userData = userSnap.data() as { displayName?: string; name?: string; nama?: string };
+        const savedName = userData.displayName || userData.name || userData.nama;
+        if (savedName) setAccountName(savedName);
+      }
+
       // 1. Jumlah Seminar (Pendaftaran)
       const regSnap = await getDocs(
         query(collection(db, 'pendaftaran'), where('pesertaId', '==', uid))
@@ -64,6 +69,43 @@ export default function PesertaProfilScreen() {
       console.error('Error loading profile stats:', error);
     } finally {
       setLoadingStats(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    loadProfileStats();
+  }, [loadProfileStats]);
+
+  const handleSaveName = async () => {
+    const uid = user?.uid;
+    const nextName = accountName.trim();
+    if (!uid || !user) {
+      Alert.alert('Sesi Berakhir', 'Silakan masuk kembali untuk mengubah nama akun.');
+      return;
+    }
+    if (!nextName) {
+      Alert.alert('Nama Wajib Diisi', 'Nama akun tidak boleh kosong.');
+      return;
+    }
+
+    setSavingName(true);
+    try {
+      await updateProfile(user, { displayName: nextName });
+      await setDoc(doc(db, 'users', uid), {
+        uid,
+        name: nextName,
+        displayName: nextName,
+        email: user.email ?? '',
+        role: 'peserta',
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      setAccountName(nextName);
+      Alert.alert('Tersimpan', 'Nama akun berhasil diperbarui.');
+    } catch (error) {
+      console.error('Gagal menyimpan nama akun:', error);
+      Alert.alert('Error', 'Gagal menyimpan nama akun.');
+    } finally {
+      setSavingName(false);
     }
   };
 
@@ -115,7 +157,7 @@ export default function PesertaProfilScreen() {
       icon: 'help-circle-outline',
       label: 'Pusat Bantuan',
       description: 'FAQ & hubungi tim support',
-      onPress: () => Alert.alert('Bantuan', 'Hubungi support@certifyelite.id untuk bantuan lebih lanjut.'),
+      onPress: () => Alert.alert('Bantuan', 'Hubungi support@e-sertifikat.id untuk bantuan lebih lanjut.'),
     },
     {
       key: 'keluar',
@@ -143,12 +185,35 @@ export default function PesertaProfilScreen() {
               style={styles.avatar}
             />
           </View>
-          <Text style={styles.name}>{displayName}</Text>
+          <Text style={styles.name}>{accountName || displayName}</Text>
           <Text style={styles.email}>{email}</Text>
           <View style={styles.roleBadge}>
             <Ionicons name="school-outline" size={12} color={DesignColors.navyDeep} />
             <Text style={styles.roleText}>Peserta Aktif</Text>
           </View>
+        </View>
+
+        <View style={styles.editNameCard}>
+          <View style={styles.editNameHeader}>
+            <Ionicons name="person-outline" size={18} color={DesignColors.navyDeep} />
+            <Text style={styles.editNameTitle}>Nama Akun</Text>
+          </View>
+          <TextInput
+            style={styles.nameInput}
+            value={accountName}
+            onChangeText={setAccountName}
+            placeholder="Masukkan nama lengkap"
+            placeholderTextColor={DesignColors.slateGray}
+            autoCapitalize="words"
+          />
+          <TouchableOpacity
+            style={[styles.saveNameButton, savingName && { opacity: 0.7 }]}
+            onPress={handleSaveName}
+            disabled={savingName}
+          >
+            <Ionicons name="save-outline" size={16} color={DesignColors.navyDeep} />
+            <Text style={styles.saveNameText}>{savingName ? 'Menyimpan...' : 'Simpan Nama'}</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.quickStatsRow}>
@@ -194,7 +259,7 @@ export default function PesertaProfilScreen() {
           ))}
         </View>
 
-        <Text style={styles.versionText}>CertifyElite • v1.0.0</Text>
+        <Text style={styles.versionText}>E-Sertifikat • v1.0.0</Text>
       </ScrollView>
     </PesertaScaffold>
   );
@@ -216,6 +281,37 @@ const styles = StyleSheet.create({
   email: { fontSize: 12, color: DesignColors.goldSoft, marginBottom: 12 },
   roleBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: DesignColors.gold, paddingHorizontal: 12, paddingVertical: 5, borderRadius: Radius.xl },
   roleText: { fontSize: 11, fontWeight: '700', color: DesignColors.navyDeep },
+  editNameCard: {
+    backgroundColor: DesignColors.ivoryCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+    padding: 16,
+    marginBottom: 16,
+  },
+  editNameHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  editNameTitle: { fontSize: 14, fontWeight: '700', color: DesignColors.navyDeep },
+  nameInput: {
+    borderWidth: 1,
+    borderColor: DesignColors.borderLight,
+    borderRadius: Radius.md,
+    backgroundColor: DesignColors.offWhite,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    fontSize: 14,
+    color: DesignColors.navyDeep,
+  },
+  saveNameButton: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: DesignColors.gold,
+    borderRadius: Radius.md,
+    paddingVertical: 12,
+  },
+  saveNameText: { fontSize: 13, fontWeight: '700', color: DesignColors.navyDeep },
   quickStatsRow: {
     flexDirection: 'row',
     backgroundColor: DesignColors.ivoryCard,

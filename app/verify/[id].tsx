@@ -101,7 +101,7 @@ export default function VerifySertifikatScreen() {
               <View style={styles.certLogoCircle}>
                 <Ionicons name="ribbon" size={22} color={DesignColors.gold} />
               </View>
-              <Text style={styles.certKicker}>CERTIFYELITE ACADEMIC PORTAL</Text>
+              <Text style={styles.certKicker}>E-SERTIFIKAT ACADEMIC PORTAL</Text>
               <Text style={styles.certTitle}>SERTIFIKAT</Text>
               <Text style={styles.certGiven}>Dengan bangga diberikan kepada</Text>
               <Text style={styles.certName}>{data.namaPeserta}</Text>

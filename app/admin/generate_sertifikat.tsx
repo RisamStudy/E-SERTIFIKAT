@@ -48,6 +48,11 @@ interface TemplateData {
   namaPenandatangan: string;
   jabatan: string;
   showQr: boolean;
+  signatories?: {
+    nama: string;
+    jabatan: string;
+    keyTtd: string;
+  }[];
 }
 
 export default function AdminGenerateSertifikatScreen() {
@@ -138,8 +143,8 @@ export default function AdminGenerateSertifikatScreen() {
           try {
             const userSnap = await getDoc(doc(db, 'users', reg.pesertaId));
             if (userSnap.exists()) {
-              const ud = userSnap.data() as { displayName?: string; email?: string; nama?: string };
-              nama = ud.displayName || ud.nama || ud.email || 'Peserta';
+              const ud = userSnap.data() as { displayName?: string; name?: string; email?: string; nama?: string };
+              nama = ud.displayName || ud.name || ud.nama || ud.email || 'Peserta';
               email = ud.email ?? '';
             }
           } catch { /* tidak ada doc user */ }
@@ -221,6 +226,9 @@ export default function AdminGenerateSertifikatScreen() {
           seminarTitle: activeSeminar.title,
           penandatangan: template.namaPenandatangan,
           jabatan: template.jabatan,
+          signatories: template.signatories || [
+            { nama: template.namaPenandatangan, jabatan: template.jabatan, keyTtd: 'tanda_tangan.png' }
+          ],
           judulAcara: template.judulAcara,
           tanggalTerbit,
           pesertaId: peserta.id,

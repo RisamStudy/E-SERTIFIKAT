@@ -98,8 +98,8 @@ export default function AdminAbsensiScreen() {
           try {
             const userSnap = await getDoc(doc(db, 'users', data.pesertaId));
             if (userSnap.exists()) {
-              const ud = userSnap.data() as { displayName?: string; email?: string; nama?: string };
-              namaPeserta = ud.displayName || ud.nama || ud.email || 'Peserta';
+              const ud = userSnap.data() as { displayName?: string; name?: string; email?: string; nama?: string };
+              namaPeserta = ud.displayName || ud.name || ud.nama || ud.email || 'Peserta';
             }
           } catch { /* tidak ada doc user */ }
 

@@ -161,7 +161,7 @@ export default function AdminDashboard() {
       {/* Header Bar */}
       <View style={styles.headerBar}>
         <View style={styles.headerSpacer} />
-        <Text style={styles.brandText}>CertifyElite</Text>
+        <Text style={styles.brandText}>E-Sertifikat</Text>
         <TouchableOpacity style={styles.avatarContainer} onPress={handleLogout} disabled={loading}>
           {loading ? (
             <ActivityIndicator size="small" color={DesignColors.gold} />

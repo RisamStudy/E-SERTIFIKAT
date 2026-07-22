@@ -61,6 +61,7 @@ export default function RegisterScreen() {
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
           name,
+          displayName: name,
           email,
           role: 'peserta', // Default role is participant
           createdAt: new Date().toISOString(),

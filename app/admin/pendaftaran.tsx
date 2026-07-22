@@ -78,8 +78,8 @@ export default function AdminPendaftaranScreen() {
           try {
             const userSnap = await getDoc(doc(db, 'users', data.pesertaId));
             if (userSnap.exists()) {
-              const userData = userSnap.data() as { displayName?: string; email?: string; nama?: string };
-              namaPeserta = userData.displayName || userData.nama || userData.email || 'Peserta';
+              const userData = userSnap.data() as { displayName?: string; name?: string; email?: string; nama?: string };
+              namaPeserta = userData.displayName || userData.name || userData.nama || userData.email || 'Peserta';
               emailPeserta = userData.email ?? '';
             }
           } catch {

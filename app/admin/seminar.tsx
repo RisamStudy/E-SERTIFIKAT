@@ -265,7 +265,7 @@ export default function AdminSeminarScreen() {
       {/* 1. Header Bar */}
       <View style={styles.headerBar}>
         <View style={styles.headerLeft}>
-          <Text style={styles.brandText}>CertifyElite</Text>
+          <Text style={styles.brandText}>E-Sertifikat</Text>
         </View>
         <View style={styles.headerRight}>
           <View style={styles.avatarContainer}>
